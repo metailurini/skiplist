@@ -62,15 +62,7 @@ func (m *Map[K, V]) find(key K) (preds, succs []*node[K, V], found bool) {
 			}
 
 			if next != m.tail {
-				if next.marker {
-					succPtr := loadNextPtr(next, i)
-					if !x.next[i].CompareAndSwap(nextPtr, succPtr) {
-						continue
-					}
-					continue
-				}
-
-				if next.val.Load() == nil {
+				if next.marker || next.val.Load() == nil {
 					succPtr := loadNextPtr(next, i)
 					if !x.next[i].CompareAndSwap(nextPtr, succPtr) {
 						continue
