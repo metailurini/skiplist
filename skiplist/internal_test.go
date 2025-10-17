@@ -18,17 +18,25 @@ func TestRandomLevelDistribution(t *testing.T) {
 	// roughly half the number of nodes at level i.
 	for i := 1; i < MaxLevel; i++ {
 		count1 := counts[i]
+		if count1 == 0 {
+			continue
+		}
+
 		count2 := counts[i+1]
 
-		// If we have a decent number of samples for level i,
-		// we can check the ratio.
-		if count1 > 100 {
-			// The ratio should be around 0.5 (our P value).
-			// We allow for some variance.
-			ratio := float64(count2) / float64(count1)
-			if math.Abs(ratio-P) > 0.1 {
-				t.Errorf("Expected ratio between level %d and %d to be around %.2f, but got %.2f", i, i+1, P, ratio)
-			}
+		ratio := float64(count2) / float64(count1)
+
+		// The number of nodes promoted from level i to i+1 follows a
+		// Binomial(count1, P) distribution, so the ratio count2/count1
+		// has mean P and variance P(1-P)/count1. We tolerate deviations
+		// up to five standard deviations, which keeps the check tight
+		// for the densely populated lower levels while avoiding
+		// spurious failures once the sample sizes thin out.
+		stdDev := math.Sqrt(P * (1 - P) / float64(count1))
+		tolerance := 5 * stdDev
+
+		if math.Abs(ratio-P) > tolerance {
+			t.Errorf("Expected ratio between level %d and %d to be around %.2f ± %.4f, but got %.2f", i, i+1, P, tolerance, ratio)
 		}
 	}
 }
