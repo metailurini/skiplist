@@ -208,7 +208,9 @@ func collectIntKeys(m *Map[int, int]) []int {
 		if next == nil || next == m.tail {
 			break
 		}
-		keys = append(keys, next.key)
+		if next.val.Load() != nil {
+			keys = append(keys, next.key)
+		}
 		node = next
 	}
 	return keys

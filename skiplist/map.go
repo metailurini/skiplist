@@ -142,8 +142,7 @@ func (m *Map[K, V]) Set(key K, value V) {
 		height := randomLevel()
 		valCopy := value
 		newNode := newNode(key, &valCopy, height)
-		newNodePtr := new(*node[K, V])
-		*newNodePtr = newNode
+		newNodePtr := &newNode
 
 		pred0 := preds[0]
 		if pred0 == nil || len(pred0.next) == 0 {
@@ -176,47 +175,47 @@ func (m *Map[K, V]) Set(key K, value V) {
 
 		atomic.AddInt64(&m.length, 1)
 
-		preds, succs, _ = m.find(key)
-
+		restart := false
 		for level := 1; level < height; level++ {
-			for {
-				pred := preds[level]
-				if pred == nil {
-					pred = m.head
-				}
-				if level >= len(pred.next) {
-					preds, succs, _ = m.find(key)
-					continue
-				}
+			pred := preds[level]
+			if pred == nil {
+				pred = m.head
+			}
+			if level >= len(pred.next) {
+				restart = true
+				break
+			}
 
-				expected := pred.next[level].Load()
-				succNode := succs[level]
-				succPtr := expected
-				if succPtr == nil {
-					succPtr = &m.tail
-				}
+			expected := pred.next[level].Load()
+			succNode := succs[level]
+			succPtr := expected
+			if succPtr == nil {
+				succPtr = &m.tail
+			}
 
-				if succNode != nil && succNode != m.tail {
-					if expected == nil || *expected != succNode {
-						preds, succs, _ = m.find(key)
-						continue
-					}
-				} else {
-					if expected != nil && *expected != m.tail {
-						preds, succs, _ = m.find(key)
-						continue
-					}
-					succNode = m.tail
-				}
-
-				newNode.next[level].Store(succPtr)
-
-				if pred.next[level].CompareAndSwap(expected, newNodePtr) {
+			if succNode != nil && succNode != m.tail {
+				if expected == nil || *expected != succNode {
+					restart = true
 					break
 				}
-
-				preds, succs, _ = m.find(key)
+			} else {
+				if expected != nil && *expected != m.tail {
+					restart = true
+					break
+				}
+				succNode = m.tail
 			}
+
+			newNode.next[level].Store(succPtr)
+
+			if !pred.next[level].CompareAndSwap(expected, newNodePtr) {
+				restart = true
+				break
+			}
+		}
+
+		if restart {
+			continue
 		}
 
 		return
