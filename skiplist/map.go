@@ -34,6 +34,14 @@ func (m *Map[K, V]) find(key K) (preds, succs []*node[K, V], found bool) {
 		}
 		if level < len(n.next) {
 			if succ := n.next[level].Load(); succ != nil {
+				if next := *succ; next != nil && next.marker {
+					if level < len(next.next) {
+						if markerSucc := next.next[level].Load(); markerSucc != nil {
+							return markerSucc
+						}
+					}
+					return &m.tail
+				}
 				return succ
 			}
 		}
@@ -220,4 +228,152 @@ func (m *Map[K, V]) Set(key K, value V) {
 
 		return
 	}
+}
+
+// Delete removes the value associated with the given key from the skip list.
+// The removal is performed in two phases: logical deletion followed by
+// physical unlinking of the node from each level.
+func (m *Map[K, V]) Delete(key K) {
+	for {
+		preds, succs, found := m.find(key)
+		if !found {
+			return
+		}
+
+		target := succs[0]
+
+		removed := m.logicalDelete(target)
+		markerPtr := m.ensureMarker(target)
+
+		if retry := m.unlinkNode(preds, target, markerPtr); retry {
+			continue
+		}
+
+		if removed {
+			return
+		}
+
+		if target.val.Load() == nil {
+			return
+		}
+	}
+}
+
+func (m *Map[K, V]) logicalDelete(target *node[K, V]) bool {
+	for {
+		current := target.val.Load()
+		if current == nil {
+			return false
+		}
+		if target.val.CompareAndSwap(current, nil) {
+			atomic.AddInt64(&m.length, -1)
+			return true
+		}
+	}
+}
+
+func (m *Map[K, V]) ensureMarker(target *node[K, V]) **node[K, V] {
+	for {
+		nextPtr := target.next[0].Load()
+		succPtr := nextPtr
+		if succPtr == nil {
+			succPtr = &m.tail
+		}
+
+		var nextNode *node[K, V]
+		if nextPtr != nil {
+			nextNode = *nextPtr
+		} else {
+			nextNode = m.tail
+		}
+
+		if nextNode != nil && nextNode.marker {
+			return nextPtr
+		}
+
+		marker := &node[K, V]{
+			key:    target.key,
+			next:   make([]atomic.Pointer[*node[K, V]], 1),
+			marker: true,
+		}
+		marker.next[0].Store(succPtr)
+
+		markerPtr := &marker
+		if target.next[0].CompareAndSwap(nextPtr, markerPtr) {
+			return markerPtr
+		}
+	}
+}
+
+func (m *Map[K, V]) unlinkNode(preds []*node[K, V], target *node[K, V], markerPtr **node[K, V]) bool {
+	succPtr0 := &m.tail
+	if markerPtr != nil {
+		if marker := *markerPtr; marker != nil && marker.marker {
+			if next := marker.next[0].Load(); next != nil {
+				succPtr0 = next
+			}
+		}
+	}
+
+	topLevel := len(target.next) - 1
+	for level := topLevel; level >= 0; level-- {
+		succPtr := succPtr0
+		if level > 0 {
+			if next := target.next[level].Load(); next != nil {
+				succPtr = next
+			} else {
+				succPtr = &m.tail
+			}
+		}
+
+		pred := preds[level]
+		if pred == nil {
+			pred = m.head
+		}
+
+		for {
+			if level >= len(pred.next) {
+				break
+			}
+
+			expected := pred.next[level].Load()
+			if expected == nil {
+				expected = &m.tail
+			}
+
+			var expectedNode *node[K, V]
+			if expected != nil {
+				expectedNode = *expected
+			}
+
+			if expectedNode == target || (level == 0 && expectedNode != nil && expectedNode.marker) {
+				if pred.next[level].CompareAndSwap(expected, succPtr) {
+					break
+				}
+				continue
+			}
+
+			break
+		}
+	}
+
+	pred0 := preds[0]
+	if pred0 == nil {
+		pred0 = m.head
+	}
+	if len(pred0.next) == 0 {
+		return false
+	}
+
+	nextPtr := pred0.next[0].Load()
+	if nextPtr == nil {
+		return false
+	}
+
+	nextNode := *nextPtr
+	if nextNode == target || (nextNode != nil && nextNode.marker) {
+		return true
+	}
+
+	return false
 }
