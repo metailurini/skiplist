@@ -2,6 +2,8 @@ package skiplist
 
 import "sync/atomic"
 
+var getAfterFindHook func(node any) bool
+
 // Map is a concurrent skip list implementation.
 type Map[K comparable, V any] struct {
 	less   Less[K]
@@ -101,7 +103,15 @@ func (m *Map[K, V]) Get(key K) (V, bool) {
 		var v V
 		return v, false
 	}
-	return *succs[0].val.Load(), true
+	valPtr := succs[0].val.Load()
+	if getAfterFindHook != nil && getAfterFindHook(succs[0]) {
+		valPtr = succs[0].val.Load()
+	}
+	if valPtr == nil {
+		var v V
+		return v, false
+	}
+	return *valPtr, true
 }
 
 // Contains returns true if the key exists in the skip list.
