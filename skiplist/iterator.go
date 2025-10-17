@@ -52,25 +52,28 @@ func (it *Iterator[K, V]) SeekGE(key K) bool {
 
 	it.invalidate()
 
+	_, succs, _ := it.m.find(key)
+	current := succs[0]
+
 	for {
-		_, succs, _ := it.m.find(key)
-		candidate := succs[0]
-		if candidate == nil || candidate == it.m.tail {
+		if current == nil || current == it.m.tail {
 			return false
 		}
 
-		valPtr := candidate.val.Load()
-		if valPtr == nil {
-			// Node became logically deleted after find; retry to locate the
-			// next viable successor.
-			continue
+		valPtr := current.val.Load()
+		if valPtr != nil {
+			it.current = current
+			it.key = current.key
+			it.value = *valPtr
+			it.valid = true
+			return true
 		}
 
-		it.current = candidate
-		it.key = candidate.key
-		it.value = *valPtr
-		it.valid = true
-		return true
+		next := it.m.advanceFrom(current)
+		if next == nil {
+			return false
+		}
+		current = next
 	}
 }
 
