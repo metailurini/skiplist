@@ -197,6 +197,89 @@ func TestSetConcurrentDuplicateInserts(t *testing.T) {
 	}
 }
 
+func TestDeleteRemovesKey(t *testing.T) {
+	less := func(a, b int) bool { return a < b }
+	m := New[int, int](less)
+
+	m.Set(1, 10)
+	m.Set(2, 20)
+	m.Set(3, 30)
+
+	m.Delete(2)
+
+	if m.Contains(2) {
+		t.Fatalf("expected key 2 to be removed")
+	}
+
+	if _, ok := m.Get(2); ok {
+		t.Fatalf("expected Get to report missing key after delete")
+	}
+
+	if !m.Contains(1) || !m.Contains(3) {
+		t.Fatalf("expected neighboring keys to remain after delete")
+	}
+
+	if got := m.Len(); got != 2 {
+		t.Fatalf("expected length 2 after delete, got %d", got)
+	}
+}
+
+func TestDeleteIdempotent(t *testing.T) {
+	less := func(a, b int) bool { return a < b }
+	m := New[int, int](less)
+
+	m.Set(42, 1)
+	m.Delete(42)
+	m.Delete(42)
+
+	if m.Contains(42) {
+		t.Fatalf("expected key to remain absent after repeated deletes")
+	}
+
+	if got := m.Len(); got != 0 {
+		t.Fatalf("expected length 0 after repeated deletes, got %d", got)
+	}
+}
+
+func TestDeleteConcurrentNeighborInserts(t *testing.T) {
+	less := func(a, b int) bool { return a < b }
+	m := New[int, int](less)
+
+	m.Set(0, 0)
+	m.Set(1, 1)
+	m.Set(2, 2)
+
+	var wg sync.WaitGroup
+	const iterations = 512
+
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			m.Set(-1, i)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			m.Set(3, i)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		m.Delete(1)
+	}()
+	wg.Wait()
+
+	if m.Contains(1) {
+		t.Fatalf("expected deleted key to remain absent after concurrent operations")
+	}
+
+	if !m.Contains(0) || !m.Contains(2) {
+		t.Fatalf("expected neighboring keys to remain present after concurrent operations")
+	}
+}
+
 func collectIntKeys(m *Map[int, int]) []int {
 	keys := make([]int, 0)
 	for node := m.head; ; {

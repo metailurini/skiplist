@@ -13,6 +13,8 @@ type node[K, V any] struct {
 	// A nil value indicates that the node is logically deleted.
 	val  atomic.Pointer[V]
 	next []atomic.Pointer[*node[K, V]]
+	// marker indicates whether this node is a marker node used during deletion.
+	marker bool
 }
 
 const (
