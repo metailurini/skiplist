@@ -119,3 +119,106 @@ func (m *Map[K, V]) Contains(key K) bool {
 	_, _, found := m.find(key)
 	return found
 }
+
+// Set inserts or updates the value for the given key.
+func (m *Map[K, V]) Set(key K, value V) {
+	for {
+		preds, succs, found := m.find(key)
+		if found {
+			node := succs[0]
+			for {
+				old := node.val.Load()
+				if old == nil {
+					break
+				}
+				newVal := value
+				if node.val.CompareAndSwap(old, &newVal) {
+					return
+				}
+			}
+			continue
+		}
+
+		height := randomLevel()
+		valCopy := value
+		newNode := newNode(key, &valCopy, height)
+		newNodePtr := new(*node[K, V])
+		*newNodePtr = newNode
+
+		pred0 := preds[0]
+		if pred0 == nil || len(pred0.next) == 0 {
+			pred0 = m.head
+		}
+
+		expected0 := pred0.next[0].Load()
+		succNode0 := succs[0]
+		succPtr0 := expected0
+		if succPtr0 == nil {
+			succPtr0 = &m.tail
+		}
+
+		if succNode0 != nil && succNode0 != m.tail {
+			if expected0 == nil || *expected0 != succNode0 {
+				continue
+			}
+		} else {
+			if expected0 != nil && *expected0 != m.tail {
+				continue
+			}
+			succNode0 = m.tail
+		}
+
+		newNode.next[0].Store(succPtr0)
+
+		if !pred0.next[0].CompareAndSwap(expected0, newNodePtr) {
+			continue
+		}
+
+		atomic.AddInt64(&m.length, 1)
+
+		preds, succs, _ = m.find(key)
+
+		for level := 1; level < height; level++ {
+			for {
+				pred := preds[level]
+				if pred == nil {
+					pred = m.head
+				}
+				if level >= len(pred.next) {
+					preds, succs, _ = m.find(key)
+					continue
+				}
+
+				expected := pred.next[level].Load()
+				succNode := succs[level]
+				succPtr := expected
+				if succPtr == nil {
+					succPtr = &m.tail
+				}
+
+				if succNode != nil && succNode != m.tail {
+					if expected == nil || *expected != succNode {
+						preds, succs, _ = m.find(key)
+						continue
+					}
+				} else {
+					if expected != nil && *expected != m.tail {
+						preds, succs, _ = m.find(key)
+						continue
+					}
+					succNode = m.tail
+				}
+
+				newNode.next[level].Store(succPtr)
+
+				if pred.next[level].CompareAndSwap(expected, newNodePtr) {
+					break
+				}
+
+				preds, succs, _ = m.find(key)
+			}
+		}
+
+		return
+	}
+}
