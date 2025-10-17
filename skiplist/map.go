@@ -26,17 +26,53 @@ func (m *Map[K, V]) find(key K) (preds, succs []*node[K, V], found bool) {
 	preds = make([]*node[K, V], MaxLevel)
 	succs = make([]*node[K, V], MaxLevel)
 
+	loadNextPtr := func(n *node[K, V], level int) **node[K, V] {
+		if n == nil {
+			return &m.tail
+		}
+		if level < len(n.next) {
+			if succ := n.next[level].Load(); succ != nil {
+				return succ
+			}
+		}
+		return &m.tail
+	}
+
 	x := m.head
 	for i := MaxLevel - 1; i >= 0; i-- {
 		for {
-			var next *node[K, V] = *(x.next[i].Load())
+			nextPtr := x.next[i].Load()
+			var next *node[K, V]
+			if nextPtr != nil {
+				next = *nextPtr
+			}
+			if next == nil {
+				next = m.tail
+			}
+
 			if next == m.tail || !m.less(next.key, key) {
+				if next != m.tail && next.val.Load() == nil {
+					succPtr := loadNextPtr(next, i)
+					if !x.next[i].CompareAndSwap(nextPtr, succPtr) {
+						continue
+					}
+					continue
+				}
+				preds[i] = x
+				succs[i] = next
 				break
 			}
+
+			if next.val.Load() == nil {
+				succPtr := loadNextPtr(next, i)
+				if !x.next[i].CompareAndSwap(nextPtr, succPtr) {
+					continue
+				}
+				continue
+			}
+
 			x = next
 		}
-		preds[i] = x
-		succs[i] = *(x.next[i].Load())
 	}
 
 	// The candidate node is the successor of the predecessor at the bottom level.
@@ -44,7 +80,7 @@ func (m *Map[K, V]) find(key K) (preds, succs []*node[K, V], found bool) {
 
 	// If the candidate is not the tail and its key matches, we've found it.
 	// We also need to check if it's not logically deleted.
-	if candidate != m.tail && candidate.key == key {
+	if candidate != nil && candidate != m.tail && candidate.key == key {
 		if candidate.val.Load() != nil {
 			found = true
 		}
