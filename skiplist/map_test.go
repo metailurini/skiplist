@@ -84,13 +84,10 @@ func TestFindHelpsUnlinkMarkersDuringConcurrentDeletion(t *testing.T) {
 
 	markerReady := make(chan struct{})
 	resumeDelete := make(chan struct{})
+	var markerOnce sync.Once
 
 	ensureMarkerHook = func(any) {
-		select {
-		case <-markerReady:
-		default:
-			close(markerReady)
-		}
+		markerOnce.Do(func() { close(markerReady) })
 		<-resumeDelete
 	}
 	defer func() { ensureMarkerHook = nil }()
