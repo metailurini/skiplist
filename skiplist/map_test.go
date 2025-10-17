@@ -453,6 +453,32 @@ func TestIteratorSkipsLogicallyDeletedNodes(t *testing.T) {
 	}
 }
 
+func TestIteratorSeekGESkipsLogicallyDeletedNodes(t *testing.T) {
+	less := func(a, b int) bool { return a < b }
+	m := New[int, int](less)
+
+	m.Set(1, 1)
+	m.Set(2, 2)
+	m.Set(3, 3)
+
+	_, succs, found := m.find(2)
+	if !found {
+		t.Fatalf("expected to locate key 2 for deletion simulation")
+	}
+	target := succs[0]
+	target.val.Store(nil)
+	atomic.AddInt64(&m.length, -1)
+
+	it := m.Iterator()
+	if !it.SeekGE(2) {
+		t.Fatalf("expected SeekGE to locate an element >= 2")
+	}
+
+	if got := it.Key(); got != 3 {
+		t.Fatalf("expected SeekGE to skip deleted key and yield 3, got %d", got)
+	}
+}
+
 func TestIteratorSkipsMarkersDuringConcurrentDeletion(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, int](less)
