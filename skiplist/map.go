@@ -242,20 +242,14 @@ func (m *Map[K, V]) Delete(key K) {
 
 		target := succs[0]
 
-		removed := m.logicalDelete(target)
+		m.logicalDelete(target)
 		markerPtr := m.ensureMarker(target)
 
 		if retry := m.unlinkNode(preds, target, markerPtr); retry {
 			continue
 		}
 
-		if removed {
-			return
-		}
-
-		if target.val.Load() == nil {
-			return
-		}
+		return
 	}
 }
 
@@ -280,14 +274,8 @@ func (m *Map[K, V]) ensureMarker(target *node[K, V]) **node[K, V] {
 			succPtr = &m.tail
 		}
 
-		var nextNode *node[K, V]
-		if nextPtr != nil {
-			nextNode = *nextPtr
-		} else {
-			nextNode = m.tail
-		}
-
-		if nextNode != nil && nextNode.marker {
+		nextNode := *succPtr
+		if nextNode.marker {
 			return nextPtr
 		}
 
@@ -336,18 +324,17 @@ func (m *Map[K, V]) unlinkNode(preds []*node[K, V], target *node[K, V], markerPt
 				break
 			}
 
-			expected := pred.next[level].Load()
-			if expected == nil {
-				expected = &m.tail
-			}
+			current := pred.next[level].Load()
 
 			var expectedNode *node[K, V]
-			if expected != nil {
-				expectedNode = *expected
+			if current == nil {
+				expectedNode = m.tail
+			} else {
+				expectedNode = *current
 			}
 
 			if expectedNode == target || (level == 0 && expectedNode != nil && expectedNode.marker) {
-				if pred.next[level].CompareAndSwap(expected, succPtr) {
+				if pred.next[level].CompareAndSwap(current, succPtr) {
 					break
 				}
 				continue
@@ -371,7 +358,7 @@ func (m *Map[K, V]) unlinkNode(preds []*node[K, V], target *node[K, V], markerPt
 	}
 
 	nextNode := *nextPtr
-	if nextNode == target || (nextNode != nil && nextNode.marker) {
+	if nextNode == target || nextNode.marker {
 		return true
 	}
 
