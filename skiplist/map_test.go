@@ -68,6 +68,74 @@ func TestFindSkipsLogicallyDeletedNodes(t *testing.T) {
 	}
 }
 
+func TestFindHelpsUnlinkMarkersDuringConcurrentDeletion(t *testing.T) {
+	less := func(a, b int) bool { return a < b }
+	m := New[int, int](less)
+
+	v1 := 1
+	target := newNode(1, &v1, 1)
+	v2 := 2
+	successor := newNode(2, &v2, 1)
+
+	target.next[0].Store(&successor)
+	successor.next[0].Store(&m.tail)
+	m.head.next[0].Store(&target)
+	m.length = 2
+
+	markerReady := make(chan struct{})
+	resumeDelete := make(chan struct{})
+
+	ensureMarkerHook = func(any) {
+		select {
+		case <-markerReady:
+		default:
+			close(markerReady)
+		}
+		<-resumeDelete
+	}
+	defer func() { ensureMarkerHook = nil }()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		m.Delete(1)
+	}()
+
+	<-markerReady
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if !m.Contains(2) {
+			t.Errorf("expected Contains to locate successor during concurrent delete")
+		}
+	}()
+	<-done
+
+	headNextPtr := m.head.next[0].Load()
+	if headNextPtr == nil {
+		t.Fatalf("expected head to reference a successor node")
+	}
+	headNext := *headNextPtr
+	if headNext == nil {
+		t.Fatalf("expected head to reference a concrete node")
+	}
+	if headNext.marker {
+		t.Fatalf("expected head to skip marker node, still observed marker")
+	}
+	if headNext.key != 2 {
+		t.Fatalf("expected head to point to successor key 2, got %v", headNext.key)
+	}
+
+	close(resumeDelete)
+	wg.Wait()
+
+	if m.Contains(1) {
+		t.Fatalf("expected deleted key to remain absent after helping traversal")
+	}
+}
+
 func TestSetInsertsAndRetrievesValue(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, string](less)

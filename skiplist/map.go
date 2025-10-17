@@ -3,6 +3,7 @@ package skiplist
 import "sync/atomic"
 
 var getAfterFindHook func(node any) bool
+var ensureMarkerHook func(node any)
 
 // Map is a concurrent skip list implementation.
 type Map[K comparable, V any] struct {
@@ -60,25 +61,28 @@ func (m *Map[K, V]) find(key K) (preds, succs []*node[K, V], found bool) {
 				next = m.tail
 			}
 
-			if next == m.tail || !m.less(next.key, key) {
-				if next != m.tail && next.val.Load() == nil {
+			if next != m.tail {
+				if next.marker {
 					succPtr := loadNextPtr(next, i)
 					if !x.next[i].CompareAndSwap(nextPtr, succPtr) {
 						continue
 					}
 					continue
 				}
+
+				if next.val.Load() == nil {
+					succPtr := loadNextPtr(next, i)
+					if !x.next[i].CompareAndSwap(nextPtr, succPtr) {
+						continue
+					}
+					continue
+				}
+			}
+
+			if next == m.tail || !m.less(next.key, key) {
 				preds[i] = x
 				succs[i] = next
 				break
-			}
-
-			if next.val.Load() == nil {
-				succPtr := loadNextPtr(next, i)
-				if !x.next[i].CompareAndSwap(nextPtr, succPtr) {
-					continue
-				}
-				continue
 			}
 
 			x = next
@@ -288,6 +292,9 @@ func (m *Map[K, V]) ensureMarker(target *node[K, V]) **node[K, V] {
 
 		markerPtr := &marker
 		if target.next[0].CompareAndSwap(nextPtr, markerPtr) {
+			if ensureMarkerHook != nil {
+				ensureMarkerHook(target)
+			}
 			return markerPtr
 		}
 	}
