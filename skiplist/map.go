@@ -363,3 +363,52 @@ func (m *Map[K, V]) unlinkNode(preds []*node[K, V], target *node[K, V], markerPt
 
 	return false
 }
+
+func (m *Map[K, V]) advanceFrom(start *node[K, V]) *node[K, V] {
+	base := start
+	for {
+		if base == nil {
+			base = m.head
+		}
+		if base == nil {
+			return nil
+		}
+
+		if len(base.next) == 0 {
+			return nil
+		}
+
+		nextPtr := base.next[0].Load()
+		if nextPtr == nil {
+			return nil
+		}
+
+		next := *nextPtr
+		if next == nil {
+			if base.next[0].CompareAndSwap(nextPtr, &m.tail) {
+				continue
+			}
+			continue
+		}
+
+		if next == m.tail {
+			return nil
+		}
+
+		if next.marker {
+			succPtr := next.next[0].Load()
+			if succPtr == nil {
+				succPtr = &m.tail
+			}
+			base.next[0].CompareAndSwap(nextPtr, succPtr)
+			continue
+		}
+
+		if next.val.Load() == nil {
+			m.find(next.key)
+			continue
+		}
+
+		return next
+	}
+}
