@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math/rand"
 	"runtime"
+	"runtime/pprof"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -200,5 +202,57 @@ func TestCascadeMarkerCleanup(t *testing.T) {
 
 	if it := m.SeekGE(0); it.Valid() {
 		t.Fatalf("expected no keys after full deletion, found key %d", it.Key())
+	}
+}
+
+func TestPutGeneratorDoesNotBlock(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping generator contention stress test in short mode")
+	}
+
+	runtime.SetBlockProfileRate(0)
+	runtime.SetBlockProfileRate(1)
+	defer runtime.SetBlockProfileRate(0)
+
+	less := func(a, b int) bool { return a < b }
+	m := New[int, int](less)
+
+	goroutines := 4 * runtime.GOMAXPROCS(0)
+	if goroutines < 8 {
+		goroutines = 8
+	}
+	const operationsPerGoroutine = 10000
+
+	var wg sync.WaitGroup
+	for g := 0; g < goroutines; g++ {
+		wg.Add(1)
+		seed := uint64(0x9e3779b97f4a7c15) + uint64(g)
+		go func(seed uint64) {
+			defer wg.Done()
+			x := seed | 1
+			for i := 0; i < operationsPerGoroutine; i++ {
+				x ^= x >> 12
+				x ^= x << 25
+				x ^= x >> 27
+				if x == 0 {
+					x = defaultSeed
+				}
+				key := int(x & ((1 << 16) - 1))
+				m.Put(key, int(x))
+			}
+		}(seed)
+	}
+
+	wg.Wait()
+	runtime.GC()
+
+	if p := pprof.Lookup("block"); p != nil {
+		var sb strings.Builder
+		if err := p.WriteTo(&sb, 2); err != nil {
+			t.Fatalf("failed to read block profile: %v", err)
+		}
+		if strings.Contains(sb.String(), "skiplist.randomLevel") {
+			t.Fatalf("randomLevel appeared in block profile indicating serialization:\n%s", sb.String())
+		}
 	}
 }

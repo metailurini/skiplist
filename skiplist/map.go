@@ -1,6 +1,8 @@
 package skiplist
 
-import "sync/atomic"
+import (
+	"sync/atomic"
+)
 
 var getAfterFindHook func(node any) bool
 var ensureMarkerHook func(node any)
@@ -13,16 +15,19 @@ type SkipListMap[K comparable, V any] struct {
 	length             int64
 	insertCASRetries   int64
 	insertCASSuccesses int64
+	rng                atomic.Uint64
 }
 
 // New returns a new SkipListMap.
 func New[K comparable, V any](less Less[K]) *SkipListMap[K, V] {
 	head, tail := newSentinels[K, V]()
-	return &SkipListMap[K, V]{
+	m := &SkipListMap[K, V]{
 		less: less,
 		head: head,
 		tail: tail,
 	}
+	m.rng.Store(newRandomSeed())
+	return m
 }
 
 // find returns the predecessors and successors of the given key at each level.
@@ -147,7 +152,7 @@ func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
 			continue
 		}
 
-		height := randomLevel()
+		height := randomLevel(&m.rng)
 		valCopy := value
 		newNode := newNode(key, &valCopy, height)
 		newNodePtr := &newNode

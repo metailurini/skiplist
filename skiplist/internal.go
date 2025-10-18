@@ -2,8 +2,8 @@ package skiplist
 
 import (
 	"math/bits"
-	"math/rand"
 	"sync/atomic"
+	"time"
 )
 
 // node is a node in the skip list.
@@ -29,21 +29,48 @@ const (
 
 // randomLevel returns a random level for a new node.
 // It uses a fast bit-sampling method to generate a geometric distribution.
-func randomLevel() int {
-	// See: https://graphics.stanford.edu/~seander/bithacks.html#ZerosOnRightMultLookup
-	// rand.Uint64() returns a 64-bit unsigned integer.
-	// We want to find the number of trailing zeros in this random number.
-	// The probability of the last bit being 0 is 1/2.
-	// The probability of the last two bits being 0 is 1/4.
-	// The probability of the last n bits being 0 is 1/2^n.
-	// This gives us a geometric distribution with p=1/2.
-	// We use bits.TrailingZeros64 to count the number of trailing zeros.
-	// We add 1 to the result because the minimum level is 1.
-	level := bits.TrailingZeros64(rand.Uint64()) + 1
+func randomLevel(seed *atomic.Uint64) int {
+	level := bits.TrailingZeros64(nextRandom64(seed)) + 1
 	if level > MaxLevel {
 		return MaxLevel
 	}
 	return level
+}
+
+const defaultSeed = uint64(0xdeadbeefcafebabe)
+
+func nextRandom64(seed *atomic.Uint64) uint64 {
+	for {
+		current := seed.Load()
+		if current == 0 {
+			newSeed := newRandomSeed()
+			if seed.CompareAndSwap(0, newSeed) {
+				current = newSeed
+			} else {
+				continue
+			}
+		}
+
+		x := current
+		x ^= x >> 12
+		x ^= x << 25
+		x ^= x >> 27
+		if x == 0 {
+			x = defaultSeed
+		}
+
+		if seed.CompareAndSwap(current, x) {
+			return x * 2685821657736338717
+		}
+	}
+}
+
+func newRandomSeed() uint64 {
+	seed := uint64(time.Now().UnixNano())
+	if seed == 0 {
+		seed = defaultSeed
+	}
+	return seed
 }
 
 // newNode creates a new node with the given key, value, and level.
