@@ -46,32 +46,6 @@ func (m *SkipListMap[K, V]) find(key K) (preds, succs []*node[K, V], found bool)
 	preds = make([]*node[K, V], MaxLevel)
 	succs = make([]*node[K, V], MaxLevel)
 
-	loadNextPtr := func(n *node[K, V], level int) **node[K, V] {
-		if n == nil {
-			return &m.tail
-		}
-		if level >= len(n.next) {
-			return &m.tail
-		}
-		succ := n.next[level].Load()
-		if succ == nil {
-			return &m.tail
-		}
-		next := *succ
-		if next == nil || !next.marker {
-			return succ
-		}
-		// next is a marker
-		if level >= len(next.next) {
-			return &m.tail
-		}
-		markerSucc := next.next[level].Load()
-		if markerSucc != nil {
-			return markerSucc
-		}
-		return &m.tail
-	}
-
 	x := m.head
 	for i := MaxLevel - 1; i >= 0; i-- {
 		for {
@@ -86,7 +60,7 @@ func (m *SkipListMap[K, V]) find(key K) (preds, succs []*node[K, V], found bool)
 
 			if next != m.tail {
 				if next.marker || next.val.Load() == nil {
-					succPtr := loadNextPtr(next, i)
+					succPtr := m.loadNextPtr(next, i)
 					if !x.next[i].CompareAndSwap(nextPtr, succPtr) {
 						continue
 					}
@@ -118,6 +92,33 @@ func (m *SkipListMap[K, V]) find(key K) (preds, succs []*node[K, V], found bool)
 	return preds, succs, found
 }
 
+func (m *SkipListMap[K, V]) loadNextPtr(n *node[K, V], level int) **node[K, V] {
+	if n == nil {
+		return &m.tail
+	}
+	if level >= len(n.next) {
+		return &m.tail
+	}
+	succ := n.next[level].Load()
+	if succ == nil {
+		return &m.tail
+	}
+	next := *succ
+	if next == nil || !next.marker {
+		return succ
+	}
+	// next is a marker
+	if level >= len(next.next) {
+		return &m.tail
+	}
+	markerSucc := next.next[level].Load()
+	if markerSucc != nil {
+		return markerSucc
+	}
+	return &m.tail
+}
+
+// Get returns the value for a key.
 func (m *SkipListMap[K, V]) LenInt64() int64 {
 	return atomic.LoadInt64(&m.length)
 }

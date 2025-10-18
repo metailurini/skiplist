@@ -663,3 +663,86 @@ func collectIntKeys(m *SkipListMap[int, int]) []int {
 	}
 	return keys
 }
+
+func TestLoadNextPtr(t *testing.T) {
+	less := func(a, b int) bool { return a < b }
+	m := New[int, int](less)
+
+	// Test case 1: n == nil
+	result := m.loadNextPtr(nil, 0)
+	if result != &m.tail {
+		t.Errorf("expected &m.tail for nil node, got %p", result)
+	}
+
+	// Test case 2: level >= len(n.next)
+	v := 1
+	n := newNode(1, &v, 1)       // height 1, so next has 1 element (index 0)
+	result = m.loadNextPtr(n, 1) // level 1 >= 1
+	if result != &m.tail {
+		t.Errorf("expected &m.tail for level out of bounds, got %p", result)
+	}
+
+	// Test case 3: succ == nil
+	v2 := 2
+	n2 := newNode(2, &v2, 2)
+	n2.next[0].Store(nil) // no successor
+	result = m.loadNextPtr(n2, 0)
+	if result != &m.tail {
+		t.Errorf("expected &m.tail for nil successor, got %p", result)
+	}
+
+	// Test case 4: next == nil
+	v3 := 3
+	n3 := newNode(3, &v3, 1)
+	var nilPtr *node[int, int] = nil
+	n3.next[0].Store(&nilPtr)
+	result = m.loadNextPtr(n3, 0)
+	if result != &nilPtr {
+		t.Errorf("expected nilPtr for nil next, got %p", result)
+	}
+
+	// Test case 5: next not marker
+	v4 := 4
+	n4 := newNode(4, &v4, 1)
+	v5 := 5
+	n5 := newNode(5, &v5, 1)
+	n4.next[0].Store(&n5)
+	result = m.loadNextPtr(n4, 0)
+	if result != &n5 {
+		t.Errorf("expected &n5 for non-marker next, got %p", result)
+	}
+
+	// Test case 6: next is marker, markerSucc != nil
+	v6 := 6
+	n6 := newNode(6, &v6, 1)
+	marker := &node[int, int]{key: 6, marker: true, next: make([]atomic.Pointer[*node[int, int]], 1)}
+	marker.next[0].Store(&n6)
+	v7 := 7
+	n7 := newNode(7, &v7, 1)
+	n7.next[0].Store(&marker)
+	result = m.loadNextPtr(n7, 0)
+	if result != &n6 {
+		t.Errorf("expected &n6 for marker with successor, got %p", result)
+	}
+
+	// Test case 7: next is marker, markerSucc == nil
+	marker2 := &node[int, int]{key: 8, marker: true, next: make([]atomic.Pointer[*node[int, int]], 1)}
+	marker2.next[0].Store(nil)
+	v8 := 8
+	n8 := newNode(8, &v8, 1)
+	n8.next[0].Store(&marker2)
+	result = m.loadNextPtr(n8, 0)
+	if result != &m.tail {
+		t.Errorf("expected &m.tail for marker with nil successor, got %p", result)
+	}
+
+	// Test case 8: marker level out of bounds
+	marker3 := &node[int, int]{key: 9, marker: true, next: make([]atomic.Pointer[*node[int, int]], 1)} // only level 0
+	v9 := 9
+	n9 := newNode(9, &v9, 2)   // height 2
+	n9.next[1].Store(&marker3) // at level 1
+	result = m.loadNextPtr(n9, 1)
+	if result != &m.tail {
+		t.Errorf("expected &m.tail for marker level out of bounds, got %p", result)
+	}
+}
