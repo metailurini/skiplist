@@ -92,6 +92,8 @@ func (m *SkipListMap[K, V]) find(key K) (preds, succs []*node[K, V], found bool)
 	return preds, succs, found
 }
 
+// loadNextPtr returns the pointer to the next node at the specified level,
+// skipping over marker nodes if necessary.
 func (m *SkipListMap[K, V]) loadNextPtr(n *node[K, V], level int) **node[K, V] {
 	if n == nil {
 		return &m.tail
