@@ -97,7 +97,7 @@ func TestFindHelpsUnlinkMarkersDuringConcurrentDeletion(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		m.Delete(1)
+		_, _ = m.Delete(1)
 	}()
 
 	<-markerReady
@@ -134,11 +134,17 @@ func TestFindHelpsUnlinkMarkersDuringConcurrentDeletion(t *testing.T) {
 	}
 }
 
-func TestSetInsertsAndRetrievesValue(t *testing.T) {
+func TestPutInsertsAndRetrievesValue(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, string](less)
 
-	m.Set(10, "ten")
+	old, replaced := m.Put(10, "ten")
+	if replaced {
+		t.Fatalf("expected insert to report replacement=false, got true")
+	}
+	if old != "" {
+		t.Fatalf("expected zero value on fresh insert, got %q", old)
+	}
 
 	if !m.Contains(10) {
 		t.Fatalf("expected Contains to report inserted key")
@@ -157,12 +163,18 @@ func TestSetInsertsAndRetrievesValue(t *testing.T) {
 	}
 }
 
-func TestSetUpdatesExistingKey(t *testing.T) {
+func TestPutUpdatesExistingKey(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, string](less)
 
-	m.Set(5, "first")
-	m.Set(5, "second")
+	m.Put(5, "first")
+	old, replaced := m.Put(5, "second")
+	if !replaced {
+		t.Fatalf("expected Put to report replacement on duplicate insert")
+	}
+	if old != "first" {
+		t.Fatalf("expected old value 'first', got %q", old)
+	}
 
 	if gotLen := m.Len(); gotLen != 1 {
 		t.Fatalf("expected length to remain 1 after duplicate insert, got %d", gotLen)
@@ -177,7 +189,23 @@ func TestSetUpdatesExistingKey(t *testing.T) {
 	}
 }
 
-func TestSetConcurrentUniqueInserts(t *testing.T) {
+func TestSetWrapperUsesPut(t *testing.T) {
+	less := func(a, b int) bool { return a < b }
+	m := New[int, string](less)
+
+	m.Set(1, "one")
+	m.Set(1, "uno")
+
+	got, ok := m.Get(1)
+	if !ok {
+		t.Fatalf("expected Set wrapper to insert key")
+	}
+	if got != "uno" {
+		t.Fatalf("expected Set wrapper to update key, got %q", got)
+	}
+}
+
+func TestPutConcurrentUniqueInserts(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, int](less)
 
@@ -192,14 +220,14 @@ func TestSetConcurrentUniqueInserts(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < perGoroutine; i++ {
 				key := base + i
-				m.Set(key, key*2)
+				m.Put(key, key*2)
 			}
 		}(start)
 	}
 	wg.Wait()
 
 	expectedLen := goroutines * perGoroutine
-	if gotLen := m.Len(); gotLen != expectedLen {
+	if gotLen := m.Len(); gotLen != int64(expectedLen) {
 		keys := collectIntKeys(m)
 		t.Logf("collected %d keys", len(keys))
 		if len(keys) > 32 {
@@ -243,7 +271,7 @@ func TestSetConcurrentDuplicateInserts(t *testing.T) {
 		wg.Add(1)
 		go func(v int) {
 			defer wg.Done()
-			m.Set(42, v)
+			m.Put(42, v)
 		}(value)
 	}
 	wg.Wait()
@@ -267,11 +295,17 @@ func TestDeleteRemovesKey(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, int](less)
 
-	m.Set(1, 10)
-	m.Set(2, 20)
-	m.Set(3, 30)
+	m.Put(1, 10)
+	m.Put(2, 20)
+	m.Put(3, 30)
 
-	m.Delete(2)
+	old, ok := m.Delete(2)
+	if !ok {
+		t.Fatalf("expected delete to report success")
+	}
+	if old != 20 {
+		t.Fatalf("expected delete to return old value 20, got %d", old)
+	}
 
 	if m.Contains(2) {
 		t.Fatalf("expected key 2 to be removed")
@@ -294,9 +328,13 @@ func TestDeleteIdempotent(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, int](less)
 
-	m.Set(42, 1)
-	m.Delete(42)
-	m.Delete(42)
+	m.Put(42, 1)
+	if old, ok := m.Delete(42); !ok || old != 1 {
+		t.Fatalf("expected first delete to return old value 1, ok=true; got (%d, %v)", old, ok)
+	}
+	if old, ok := m.Delete(42); ok || old != 0 {
+		t.Fatalf("expected second delete to report ok=false and zero value, got (%d, %v)", old, ok)
+	}
 
 	if m.Contains(42) {
 		t.Fatalf("expected key to remain absent after repeated deletes")
@@ -311,9 +349,9 @@ func TestDeleteConcurrentNeighborInserts(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, int](less)
 
-	m.Set(0, 0)
-	m.Set(1, 1)
-	m.Set(2, 2)
+	m.Put(0, 0)
+	m.Put(1, 1)
+	m.Put(2, 2)
 
 	var wg sync.WaitGroup
 	const iterations = 512
@@ -322,18 +360,18 @@ func TestDeleteConcurrentNeighborInserts(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
-			m.Set(-1, i)
+			m.Put(-1, i)
 		}
 	}()
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
-			m.Set(3, i)
+			m.Put(3, i)
 		}
 	}()
 	go func() {
 		defer wg.Done()
-		m.Delete(1)
+		_, _ = m.Delete(1)
 	}()
 	wg.Wait()
 
@@ -351,7 +389,7 @@ func TestIteratorNextTraversesElementsInOrder(t *testing.T) {
 	m := New[int, int](less)
 
 	for _, key := range []int{5, 1, 3} {
-		m.Set(key, key*10)
+		m.Put(key, key*10)
 	}
 
 	it := m.Iterator()
@@ -385,9 +423,9 @@ func TestIteratorSeekGEPositionsCorrectly(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, string](less)
 
-	m.Set(1, "one")
-	m.Set(3, "three")
-	m.Set(5, "five")
+	m.Put(1, "one")
+	m.Put(3, "three")
+	m.Put(5, "five")
 
 	it := m.Iterator()
 
@@ -422,7 +460,7 @@ func TestIteratorSkipsLogicallyDeletedNodes(t *testing.T) {
 	m := New[int, int](less)
 
 	for i := 1; i <= 3; i++ {
-		m.Set(i, i)
+		m.Put(i, i)
 	}
 
 	_, succs, found := m.find(2)
@@ -457,9 +495,9 @@ func TestIteratorSeekGESkipsLogicallyDeletedNodes(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, int](less)
 
-	m.Set(1, 1)
-	m.Set(2, 2)
-	m.Set(3, 3)
+	m.Put(1, 1)
+	m.Put(2, 2)
+	m.Put(3, 3)
 
 	_, succs, found := m.find(2)
 	if !found {
@@ -479,12 +517,33 @@ func TestIteratorSeekGESkipsLogicallyDeletedNodes(t *testing.T) {
 	}
 }
 
+func TestMapSeekGE(t *testing.T) {
+	less := func(a, b int) bool { return a < b }
+	m := New[int, int](less)
+
+	m.Put(10, 10)
+	m.Put(20, 20)
+
+	it := m.SeekGE(15)
+	if !it.Valid() {
+		t.Fatalf("expected SeekGE to yield iterator at key >= 15")
+	}
+	if got := it.Key(); got != 20 {
+		t.Fatalf("expected SeekGE to land on key 20, got %d", got)
+	}
+
+	it = m.SeekGE(25)
+	if it.Valid() {
+		t.Fatalf("expected SeekGE beyond last key to report invalid iterator")
+	}
+}
+
 func TestIteratorSkipsMarkersDuringConcurrentDeletion(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, int](less)
 
-	m.Set(1, 1)
-	m.Set(2, 2)
+	m.Put(1, 1)
+	m.Put(2, 2)
 
 	markerReady := make(chan struct{})
 	resume := make(chan struct{})
@@ -500,7 +559,7 @@ func TestIteratorSkipsMarkersDuringConcurrentDeletion(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		m.Delete(1)
+		_, _ = m.Delete(1)
 	}()
 
 	<-markerReady

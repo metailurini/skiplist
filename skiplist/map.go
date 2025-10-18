@@ -7,10 +7,12 @@ var ensureMarkerHook func(node any)
 
 // Map is a concurrent skip list implementation.
 type Map[K comparable, V any] struct {
-	less   Less[K]
-	head   *node[K, V]
-	tail   *node[K, V]
-	length int64
+	less               Less[K]
+	head               *node[K, V]
+	tail               *node[K, V]
+	length             int64
+	insertCASRetries   int64
+	insertCASSuccesses int64
 }
 
 // New returns a new skip list.
@@ -95,8 +97,8 @@ func (m *Map[K, V]) find(key K) (preds, succs []*node[K, V], found bool) {
 	return preds, succs, found
 }
 
-func (m *Map[K, V]) Len() int {
-	return int(atomic.LoadInt64(&m.length))
+func (m *Map[K, V]) Len() int64 {
+	return atomic.LoadInt64(&m.length)
 }
 
 // Get returns the value for a key.
@@ -124,20 +126,23 @@ func (m *Map[K, V]) Contains(key K) bool {
 	return found
 }
 
-// Set inserts or updates the value for the given key.
-func (m *Map[K, V]) Set(key K, value V) {
+// Put inserts or updates the value for the given key.
+// It returns the previous value alongside a flag indicating whether
+// an existing entry was replaced.
+func (m *Map[K, V]) Put(key K, value V) (V, bool) {
 	for {
 		preds, succs, found := m.find(key)
 		if found {
 			node := succs[0]
 			for {
-				old := node.val.Load()
-				if old == nil {
+				oldPtr := node.val.Load()
+				if oldPtr == nil {
 					break
 				}
+				oldVal := *oldPtr
 				newVal := value
-				if node.val.CompareAndSwap(old, &newVal) {
-					return
+				if node.val.CompareAndSwap(oldPtr, &newVal) {
+					return oldVal, true
 				}
 			}
 			continue
@@ -162,10 +167,12 @@ func (m *Map[K, V]) Set(key K, value V) {
 
 		if succNode0 != nil && succNode0 != m.tail {
 			if expected0 == nil || *expected0 != succNode0 {
+				atomic.AddInt64(&m.insertCASRetries, 1)
 				continue
 			}
 		} else {
 			if expected0 != nil && *expected0 != m.tail {
+				atomic.AddInt64(&m.insertCASRetries, 1)
 				continue
 			}
 			succNode0 = m.tail
@@ -174,9 +181,11 @@ func (m *Map[K, V]) Set(key K, value V) {
 		newNode.next[0].Store(succPtr0)
 
 		if !pred0.next[0].CompareAndSwap(expected0, newNodePtr) {
+			atomic.AddInt64(&m.insertCASRetries, 1)
 			continue
 		}
 
+		atomic.AddInt64(&m.insertCASSuccesses, 1)
 		atomic.AddInt64(&m.length, 1)
 
 		restart := false
@@ -222,42 +231,54 @@ func (m *Map[K, V]) Set(key K, value V) {
 			continue
 		}
 
-		return
+		var zero V
+		return zero, false
 	}
+}
+
+// Set inserts or updates the value for the given key.
+// Deprecated: use Put to observe whether an existing value was replaced.
+func (m *Map[K, V]) Set(key K, value V) {
+	_, _ = m.Put(key, value)
 }
 
 // Delete removes the value associated with the given key from the skip list.
 // The removal is performed in two phases: logical deletion followed by
 // physical unlinking of the node from each level.
-func (m *Map[K, V]) Delete(key K) {
+func (m *Map[K, V]) Delete(key K) (V, bool) {
 	for {
 		preds, succs, found := m.find(key)
 		if !found {
-			return
+			var zero V
+			return zero, false
 		}
 
 		target := succs[0]
-
-		m.logicalDelete(target)
+		oldVal, ok := m.logicalDelete(target)
+		if !ok {
+			continue
+		}
 		markerPtr := m.ensureMarker(target)
 
 		if retry := m.unlinkNode(preds, target, markerPtr); retry {
 			continue
 		}
 
-		return
+		return oldVal, true
 	}
 }
 
-func (m *Map[K, V]) logicalDelete(target *node[K, V]) bool {
+func (m *Map[K, V]) logicalDelete(target *node[K, V]) (V, bool) {
 	for {
 		current := target.val.Load()
 		if current == nil {
-			return false
+			var zero V
+			return zero, false
 		}
+		oldVal := *current
 		if target.val.CompareAndSwap(current, nil) {
 			atomic.AddInt64(&m.length, -1)
-			return true
+			return oldVal, true
 		}
 	}
 }
@@ -411,4 +432,20 @@ func (m *Map[K, V]) advanceFrom(start *node[K, V]) *node[K, V] {
 
 		return next
 	}
+}
+
+// SeekGE returns an iterator positioned at the first element whose key is
+// greater than or equal to the provided key. The returned iterator is valid
+// if and only if such an element exists.
+func (m *Map[K, V]) SeekGE(key K) *Iterator[K, V] {
+	it := m.Iterator()
+	it.SeekGE(key)
+	return it
+}
+
+// InsertCASStats reports the total number of CAS retries and successful
+// insertions observed at the skip list's bottom level. These counters enable
+// contention analysis in benchmarks.
+func (m *Map[K, V]) InsertCASStats() (retries, successes int64) {
+	return atomic.LoadInt64(&m.insertCASRetries), atomic.LoadInt64(&m.insertCASSuccesses)
 }
