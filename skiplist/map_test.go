@@ -1,9 +1,11 @@
 package skiplist
 
 import (
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestGetHandlesLogicalDeletionBetweenFindAndLoad(t *testing.T) {
@@ -186,6 +188,53 @@ func TestPutUpdatesExistingKey(t *testing.T) {
 	}
 	if got != "second" {
 		t.Fatalf("expected updated value 'second', got %q", got)
+	}
+}
+
+func TestPutRestartDoesNotReportReplacement(t *testing.T) {
+	less := func(a, b int) bool { return a < b }
+	m := New[int, int](less)
+
+	var once sync.Once
+	putLevelCASHook = func(level int, pred any, expected any, _ any) {
+		if level != 1 {
+			return
+		}
+		once.Do(func() {
+			predNode, ok := pred.(*node[int, int])
+			if !ok || predNode == nil {
+				return
+			}
+			expectedPtr, ok := expected.(**node[int, int])
+			if !ok || expectedPtr == nil {
+				return
+			}
+			predNode.next[level].CompareAndSwap(expectedPtr, nil)
+		})
+	}
+	defer func() { putLevelCASHook = nil }()
+
+	rand.Seed(0)
+	defer rand.Seed(time.Now().UnixNano())
+
+	old, replaced := m.Put(1, 42)
+	if replaced {
+		t.Fatalf("expected Put to report replacement=false after restart, got true")
+	}
+	if old != 0 {
+		t.Fatalf("expected zero value after fresh insert, got %d", old)
+	}
+
+	got, ok := m.Get(1)
+	if !ok {
+		t.Fatalf("expected Get to succeed after restart-assisted insert")
+	}
+	if got != 42 {
+		t.Fatalf("expected value 42 after restart-assisted insert, got %d", got)
+	}
+
+	if length := m.LenInt64(); length != 1 {
+		t.Fatalf("expected length 1 after single insert, got %d", length)
 	}
 }
 
