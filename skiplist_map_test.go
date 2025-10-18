@@ -14,7 +14,7 @@ func TestGetHandlesLogicalDeletionBetweenFindAndLoad(t *testing.T) {
 	node.next[0].Store(&m.tail)
 	successor := node
 	m.head.next[0].Store(&successor)
-	m.length = 1
+	m.metrics.length.Store(1)
 
 	getAfterFindHook = func(any) bool {
 		node.val.Store(nil)
@@ -81,7 +81,7 @@ func TestFindHelpsUnlinkMarkersDuringConcurrentDeletion(t *testing.T) {
 	target.next[0].Store(&successor)
 	successor.next[0].Store(&m.tail)
 	m.head.next[0].Store(&target)
-	m.length = 2
+	m.metrics.length.Store(2)
 
 	markerReady := make(chan struct{})
 	resumeDelete := make(chan struct{})
@@ -518,7 +518,7 @@ func TestIteratorSkipsLogicallyDeletedNodes(t *testing.T) {
 	}
 	target := succs[0]
 	target.val.Store(nil)
-	atomic.AddInt64(&m.length, -1)
+	m.metrics.AddLen(-1)
 
 	it := m.Iterator()
 	if !it.Next() {
@@ -554,7 +554,7 @@ func TestIteratorSeekGESkipsLogicallyDeletedNodes(t *testing.T) {
 	}
 	target := succs[0]
 	target.val.Store(nil)
-	atomic.AddInt64(&m.length, -1)
+	m.metrics.AddLen(-1)
 
 	it := m.Iterator()
 	if !it.SeekGE(2) {

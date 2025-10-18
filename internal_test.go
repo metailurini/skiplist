@@ -2,17 +2,16 @@ package skiplist
 
 import (
 	"math"
-	"sync/atomic"
 	"testing"
 )
 
 func TestRandomLevelDistribution(t *testing.T) {
 	numSamples := 1000000
 	counts := make(map[int]int)
-	var seed atomic.Uint64
-	seed.Store(0x123456789abcdef)
+	rng := &RNG{}
+	rng.seed.Store(0x123456789abcdef)
 	for i := 0; i < numSamples; i++ {
-		level := randomLevel(&seed)
+		level := rng.RandomLevel()
 		counts[level]++
 	}
 
