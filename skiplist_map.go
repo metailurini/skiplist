@@ -329,7 +329,7 @@ func (m *SkipListMap[K, V]) Delete(key K) (V, bool) {
 		}
 		markerPtr := m.ensureMarker(target)
 
-		if retry := m.unlinkNode(preds, target, markerPtr); retry {
+		if retry := m.physicalDelete(preds, target, markerPtr); retry {
 			continue
 		}
 
@@ -382,7 +382,7 @@ func (m *SkipListMap[K, V]) ensureMarker(target *node[K, V]) **node[K, V] {
 	}
 }
 
-func (m *SkipListMap[K, V]) unlinkNode(preds []*node[K, V], target *node[K, V], markerPtr **node[K, V]) bool {
+func (m *SkipListMap[K, V]) physicalDelete(preds []*node[K, V], target *node[K, V], markerPtr **node[K, V]) bool {
 	succPtr0 := &m.tail
 	if markerPtr != nil {
 		if marker := *markerPtr; marker != nil && marker.marker {
