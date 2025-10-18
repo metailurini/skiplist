@@ -20,7 +20,6 @@ func (u *mutatorImpl[K, V]) put(key K, value V) (V, bool) {
 			pending := *pendingPtr
 
 			if succs[0] != pending {
-				pendingPtr = nil
 				var zero V
 				return zero, false
 			}
