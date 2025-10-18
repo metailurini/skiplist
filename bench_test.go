@@ -1,4 +1,4 @@
-package skiplist_test
+package skiplist
 
 import (
 	"fmt"
@@ -6,8 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-
-	skiplistpkg "github.com/metailurini/skiplist"
 )
 
 type distributionKind int
@@ -51,7 +49,7 @@ func BenchmarkSkipListMapWorkloads(b *testing.B) {
 					for _, threads := range threadCounts {
 						threads := threads
 						b.Run(fmt.Sprintf("P%d", threads), func(b *testing.B) {
-							m := skiplistpkg.New[int, int](less)
+							m := New[int, int](less)
 							for i := 0; i < keyRange/2; i++ {
 								_, _ = m.Put(i, i)
 							}
