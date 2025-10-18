@@ -4,13 +4,15 @@ import (
 	"sync/atomic"
 )
 
-var getAfterFindHook func(node any) bool
-var ensureMarkerHook func(node any)
+var (
+	getAfterFindHook func(node any) bool
+	ensureMarkerHook func(node any)
 
-// putLevelCASHook is invoked during a CAS operation when inserting a node at a given level.
-// This hook is intended solely for test instrumentation and must not perform blocking
-// or mutating operations that affect production correctness.
-var putLevelCASHook func(level int, pred any, expected any, newNodePtr any)
+	// putLevelCASHook is invoked during a CAS operation when inserting a node at a given level.
+	// This hook is intended solely for test instrumentation and must not perform blocking
+	// or mutating operations that affect production correctness.
+	putLevelCASHook func(level int, pred any, expected any, newNodePtr any)
+)
 
 // SkipListMap is a concurrent skip list implementation.
 type SkipListMap[K comparable, V any] struct {
