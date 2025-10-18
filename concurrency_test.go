@@ -72,6 +72,15 @@ func TestConcurrentMixedOperationsStorm(t *testing.T) {
 		observed[k] = v
 	}
 
+	// Verify that all observed keys are present in the model (values may diverge due to race conditions)
+	modelMu.Lock()
+	for k := range observed {
+		if _, ok := model[k]; !ok {
+			t.Fatalf("key %d present in skiplist but not in model", k)
+		}
+	}
+	modelMu.Unlock()
+
 	// Note: length may be off by 1 due to concurrent races, but structure should be consistent
 	_ = m.LenInt64()
 }
