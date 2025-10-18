@@ -4,13 +4,16 @@ import (
 	"sync/atomic"
 )
 
+// These hooks are intended solely for test instrumentation and must not perform blocking
+// or mutating operations that affect production correctness.
 var (
+	// getAfterFindHook is invoked after finding a node in Get operations.
 	getAfterFindHook func(node any) bool
+
+	// ensureMarkerHook is invoked after placing a marker node in ensureMarker.
 	ensureMarkerHook func(node any)
 
 	// putLevelCASHook is invoked during a CAS operation when inserting a node at a given level.
-	// This hook is intended solely for test instrumentation and must not perform blocking
-	// or mutating operations that affect production correctness.
 	putLevelCASHook func(level int, pred any, expected any, newNodePtr any)
 )
 
