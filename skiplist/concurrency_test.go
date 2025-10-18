@@ -71,7 +71,7 @@ func TestConcurrentMixedOperationsStorm(t *testing.T) {
 	expectedLen := len(model)
 	modelMu.Unlock()
 
-	if got := m.Len(); got != int64(expectedLen) {
+	if got := m.LenInt64(); got != int64(expectedLen) {
 		t.Fatalf("expected length %d after storm, got %d", expectedLen, got)
 	}
 	if len(observed) != expectedLen {
@@ -114,7 +114,7 @@ func TestDeleteWhileInsertRacing(t *testing.T) {
 	close(start)
 	wg.Wait()
 
-	if got := m.Len(); got < 0 {
+	if got := m.LenInt64(); got < 0 {
 		t.Fatalf("length should never be negative, got %d", got)
 	}
 
@@ -194,7 +194,7 @@ func TestCascadeMarkerCleanup(t *testing.T) {
 	default:
 	}
 
-	if got := m.Len(); got != 0 {
+	if got := m.LenInt64(); got != 0 {
 		t.Fatalf("expected map to be empty after cascading deletes, got %d", got)
 	}
 

@@ -158,7 +158,7 @@ func TestPutInsertsAndRetrievesValue(t *testing.T) {
 		t.Fatalf("expected value 'ten', got %q", got)
 	}
 
-	if gotLen := m.Len(); gotLen != 1 {
+	if gotLen := m.LenInt64(); gotLen != 1 {
 		t.Fatalf("expected length 1 after single insert, got %d", gotLen)
 	}
 }
@@ -176,7 +176,7 @@ func TestPutUpdatesExistingKey(t *testing.T) {
 		t.Fatalf("expected old value 'first', got %q", old)
 	}
 
-	if gotLen := m.Len(); gotLen != 1 {
+	if gotLen := m.LenInt64(); gotLen != 1 {
 		t.Fatalf("expected length to remain 1 after duplicate insert, got %d", gotLen)
 	}
 
@@ -227,7 +227,7 @@ func TestPutConcurrentUniqueInserts(t *testing.T) {
 	wg.Wait()
 
 	expectedLen := goroutines * perGoroutine
-	if gotLen := m.Len(); gotLen != int64(expectedLen) {
+	if gotLen := m.LenInt64(); gotLen != int64(expectedLen) {
 		keys := collectIntKeys(m)
 		t.Logf("collected %d keys", len(keys))
 		if len(keys) > 32 {
@@ -276,7 +276,7 @@ func TestSetConcurrentDuplicateInserts(t *testing.T) {
 	}
 	wg.Wait()
 
-	if gotLen := m.Len(); gotLen != 1 {
+	if gotLen := m.LenInt64(); gotLen != 1 {
 		t.Fatalf("expected length 1 after duplicate inserts, got %d", gotLen)
 	}
 	if !m.Contains(42) {
@@ -319,7 +319,7 @@ func TestDeleteRemovesKey(t *testing.T) {
 		t.Fatalf("expected neighboring keys to remain after delete")
 	}
 
-	if got := m.Len(); got != 2 {
+	if got := m.LenInt64(); got != 2 {
 		t.Fatalf("expected length 2 after delete, got %d", got)
 	}
 }
@@ -340,7 +340,7 @@ func TestDeleteIdempotent(t *testing.T) {
 		t.Fatalf("expected key to remain absent after repeated deletes")
 	}
 
-	if got := m.Len(); got != 0 {
+	if got := m.LenInt64(); got != 0 {
 		t.Fatalf("expected length 0 after repeated deletes, got %d", got)
 	}
 }

@@ -11,7 +11,7 @@ notes:
 * `Get(k) (v, ok)` looks up a key.
 * `Delete(k) (old, ok)` removes a key and reports the value that was present.
 * `Contains(k) bool` observes presence.
-* `Len() int64` returns the number of live keys via an atomic counter.
+* `LenInt64() int64` returns the number of live keys via an atomic counter.
 * `SeekGE(k) *Iterator` positions an iterator at the first key ≥ `k`.
 
 Searches walk the tower from the top level down while helping unlink marker

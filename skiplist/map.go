@@ -97,7 +97,7 @@ func (m *Map[K, V]) find(key K) (preds, succs []*node[K, V], found bool) {
 	return preds, succs, found
 }
 
-func (m *Map[K, V]) Len() int64 {
+func (m *Map[K, V]) LenInt64() int64 {
 	return atomic.LoadInt64(&m.length)
 }
 
@@ -127,8 +127,7 @@ func (m *Map[K, V]) Contains(key K) bool {
 }
 
 // Put inserts or updates the value for the given key.
-// It returns the previous value alongside a flag indicating whether
-// an existing entry was replaced.
+// It returns the previous value and a flag indicating whether an existing entry was replaced.
 func (m *Map[K, V]) Put(key K, value V) (V, bool) {
 	for {
 		preds, succs, found := m.find(key)
