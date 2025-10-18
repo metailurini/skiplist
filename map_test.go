@@ -1,11 +1,9 @@
 package skiplist
 
 import (
-	"math/rand"
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 )
 
 func TestGetHandlesLogicalDeletionBetweenFindAndLoad(t *testing.T) {
@@ -196,11 +194,13 @@ func TestPutRestartDoesNotReportReplacement(t *testing.T) {
 	m := New[int, int](less)
 
 	var once sync.Once
+	var triggered atomic.Bool
 	putLevelCASHook = func(level int, pred any, expected any, _ any) {
 		if level != 1 {
 			return
 		}
 		once.Do(func() {
+			triggered.Store(true)
 			predNode, ok := pred.(*node[int, int])
 			if !ok || predNode == nil {
 				return
@@ -214,15 +214,31 @@ func TestPutRestartDoesNotReportReplacement(t *testing.T) {
 	}
 	defer func() { putLevelCASHook = nil }()
 
-	rand.Seed(0)
-	defer rand.Seed(time.Now().UnixNano())
+	for attempts := 0; attempts < 1000; attempts++ {
+		old, replaced := m.Put(1, 42)
+		if triggered.Load() {
+			if replaced {
+				t.Fatalf("expected Put to report replacement=false after restart, got true")
+			}
+			if old != 0 {
+				t.Fatalf("expected zero value after fresh insert, got %d", old)
+			}
+			break
+		}
 
-	old, replaced := m.Put(1, 42)
-	if replaced {
-		t.Fatalf("expected Put to report replacement=false after restart, got true")
+		if replaced {
+			t.Fatalf("expected initial insert to report replacement=false before hook triggers")
+		}
+		if old != 0 {
+			t.Fatalf("expected zero value before hook triggers, got %d", old)
+		}
+		if _, ok := m.Delete(1); !ok {
+			t.Fatalf("expected Delete to remove key before retrying insert")
+		}
 	}
-	if old != 0 {
-		t.Fatalf("expected zero value after fresh insert, got %d", old)
+
+	if !triggered.Load() {
+		t.Fatalf("expected CAS hook to trigger at level 1")
 	}
 
 	got, ok := m.Get(1)

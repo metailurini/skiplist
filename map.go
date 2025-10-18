@@ -4,6 +4,16 @@ import "sync/atomic"
 
 var getAfterFindHook func(node any) bool
 var ensureMarkerHook func(node any)
+
+// putLevelCASHook is invoked during a CAS operation when inserting a node at a given level.
+// Parameters:
+//   - level: the skip list level at which the CAS is attempted
+//   - pred: the predecessor node
+//   - expected: the expected successor **node
+//   - newNodePtr: pointer to the pending **node to be inserted
+//
+// This hook is intended solely for test instrumentation and must not perform blocking
+// or mutating operations that affect production correctness.
 var putLevelCASHook func(level int, pred any, expected any, newNodePtr any)
 
 // SkipListMap is a concurrent skip list implementation.
@@ -139,10 +149,6 @@ func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
 		}
 
 		pending := *pendingPtr
-		if pending == nil {
-			pendingPtr = nil
-			return true, 0
-		}
 
 		height := len(pending.next)
 		for level := nextLevel; level < height; level++ {
@@ -151,6 +157,7 @@ func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
 				pred = m.head
 			}
 			if level >= len(pred.next) {
+				// The predecessor we observed no longer has this level; retry.
 				atomic.AddInt64(&m.insertCASRetries, 1)
 				return false, level
 			}
@@ -164,6 +171,7 @@ func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
 
 			if succNode != nil && succNode != m.tail {
 				if expected == nil || *expected != succNode {
+					// The snapshot at this level is stale; retry the insertion.
 					atomic.AddInt64(&m.insertCASRetries, 1)
 					return false, level
 				}
@@ -196,11 +204,6 @@ func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
 
 		if pendingPtr != nil {
 			pending := *pendingPtr
-			if pending == nil {
-				pendingPtr = nil
-				nextLevel = 1
-				continue
-			}
 
 			if succs[0] != pending {
 				pendingPtr = nil
