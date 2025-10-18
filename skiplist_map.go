@@ -156,62 +156,6 @@ func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
 	var pendingPtr **node[K, V]
 	nextLevel := 1
 
-	finishLevels := func(preds, succs []*node[K, V]) (bool, int) {
-		if pendingPtr == nil {
-			return true, 0
-		}
-
-		pending := *pendingPtr
-
-		height := len(pending.next)
-		for level := nextLevel; level < height; level++ {
-			pred := preds[level]
-			if pred == nil {
-				pred = m.head
-			}
-			if level >= len(pred.next) {
-				// The predecessor we observed no longer has this level; retry.
-				atomic.AddInt64(&m.insertCASRetries, 1)
-				return false, level
-			}
-
-			expected := pred.next[level].Load()
-			succNode := succs[level]
-			succPtr := expected
-			if succPtr == nil {
-				succPtr = &m.tail
-			}
-
-			if succNode != nil && succNode != m.tail {
-				if expected == nil || *expected != succNode {
-					// The snapshot at this level is stale; retry the insertion.
-					atomic.AddInt64(&m.insertCASRetries, 1)
-					return false, level
-				}
-			} else {
-				if expected != nil && *expected != m.tail {
-					atomic.AddInt64(&m.insertCASRetries, 1)
-					return false, level
-				}
-				succNode = m.tail
-			}
-
-			pending.next[level].Store(succPtr)
-
-			if putLevelCASHook != nil {
-				putLevelCASHook(level, pred, expected, pendingPtr)
-			}
-
-			if !pred.next[level].CompareAndSwap(expected, pendingPtr) {
-				atomic.AddInt64(&m.insertCASRetries, 1)
-				return false, level
-			}
-		}
-
-		pendingPtr = nil
-		return true, len(pending.next)
-	}
-
 	for {
 		preds, succs, found := m.find(key)
 
@@ -224,7 +168,7 @@ func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
 				return zero, false
 			}
 
-			done, resumeLevel := finishLevels(preds, succs)
+			done, resumeLevel := m.finishLevels(preds, succs, pendingPtr, nextLevel)
 			if done {
 				var zero V
 				return zero, false
@@ -300,7 +244,7 @@ func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
 			return zero, false
 		}
 
-		done, resumeLevel := finishLevels(preds, succs)
+		done, resumeLevel := m.finishLevels(preds, succs, pendingPtr, nextLevel)
 		if done {
 			var zero V
 			return zero, false
@@ -308,6 +252,65 @@ func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
 
 		nextLevel = resumeLevel
 	}
+}
+
+// finishLevels links a pending node at higher levels (above 0) using CAS.
+// Returns true on success, or false with resume level on failure.
+// Handles concurrency with retries on CAS failures or stale snapshots.
+func (m *SkipListMap[K, V]) finishLevels(preds, succs []*node[K, V], pendingPtr **node[K, V], nextLevel int) (bool, int) {
+	if pendingPtr == nil {
+		return true, 0
+	}
+
+	pending := *pendingPtr
+
+	height := len(pending.next)
+	for level := nextLevel; level < height; level++ {
+		pred := preds[level]
+		if pred == nil {
+			pred = m.head
+		}
+		if level >= len(pred.next) {
+			// The predecessor we observed no longer has this level; retry.
+			atomic.AddInt64(&m.insertCASRetries, 1)
+			return false, level
+		}
+
+		expected := pred.next[level].Load()
+		succNode := succs[level]
+		succPtr := expected
+		if succPtr == nil {
+			succPtr = &m.tail
+		}
+
+		if succNode != nil && succNode != m.tail {
+			if expected == nil || *expected != succNode {
+				// The snapshot at this level is stale; retry the insertion.
+				atomic.AddInt64(&m.insertCASRetries, 1)
+				return false, level
+			}
+		} else {
+			if expected != nil && *expected != m.tail {
+				atomic.AddInt64(&m.insertCASRetries, 1)
+				return false, level
+			}
+			succNode = m.tail
+		}
+
+		pending.next[level].Store(succPtr)
+
+		if putLevelCASHook != nil {
+			putLevelCASHook(level, pred, expected, pendingPtr)
+		}
+
+		if !pred.next[level].CompareAndSwap(expected, pendingPtr) {
+			atomic.AddInt64(&m.insertCASRetries, 1)
+			return false, level
+		}
+	}
+
+	pendingPtr = nil
+	return true, len(pending.next)
 }
 
 // Delete removes the value associated with the given key from the skip list.
