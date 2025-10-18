@@ -254,22 +254,6 @@ func TestPutRestartDoesNotReportReplacement(t *testing.T) {
 	}
 }
 
-func TestSetWrapperUsesPut(t *testing.T) {
-	less := func(a, b int) bool { return a < b }
-	m := New[int, string](less)
-
-	m.Set(1, "one")
-	m.Set(1, "uno")
-
-	got, ok := m.Get(1)
-	if !ok {
-		t.Fatalf("expected Set wrapper to insert key")
-	}
-	if got != "uno" {
-		t.Fatalf("expected Set wrapper to update key, got %q", got)
-	}
-}
-
 func TestPutConcurrentUniqueInserts(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, int](less)
@@ -324,7 +308,7 @@ func TestPutConcurrentUniqueInserts(t *testing.T) {
 	}
 }
 
-func TestSetConcurrentDuplicateInserts(t *testing.T) {
+func TestPutConcurrentDuplicateInserts(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, int](less)
 

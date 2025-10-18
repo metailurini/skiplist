@@ -10,10 +10,6 @@ type SkipList[K comparable, V any] interface {
 	// a flag indicating replacement.
 	Put(key K, value V) (V, bool)
 
-	// Set inserts or updates a key-value pair. Deprecated: prefer Put to
-	// observe the replaced flag.
-	Set(key K, value V)
-
 	// Get returns the value for a key.
 	// The boolean is true if the key exists, false otherwise.
 	Get(key K) (V, bool)

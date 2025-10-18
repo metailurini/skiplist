@@ -310,12 +310,6 @@ func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
 	}
 }
 
-// Set inserts or updates the value for the given key.
-// Deprecated: use Put to observe whether an existing value was replaced.
-func (m *SkipListMap[K, V]) Set(key K, value V) {
-	_, _ = m.Put(key, value)
-}
-
 // Delete removes the value associated with the given key from the skip list.
 // The removal is performed in two phases: logical deletion followed by
 // physical unlinking of the node from each level.
