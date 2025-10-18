@@ -50,18 +50,24 @@ func (m *SkipListMap[K, V]) find(key K) (preds, succs []*node[K, V], found bool)
 		if n == nil {
 			return &m.tail
 		}
-		if level < len(n.next) {
-			if succ := n.next[level].Load(); succ != nil {
-				if next := *succ; next != nil && next.marker {
-					if level < len(next.next) {
-						if markerSucc := next.next[level].Load(); markerSucc != nil {
-							return markerSucc
-						}
-					}
-					return &m.tail
-				}
-				return succ
-			}
+		if level >= len(n.next) {
+			return &m.tail
+		}
+		succ := n.next[level].Load()
+		if succ == nil {
+			return &m.tail
+		}
+		next := *succ
+		if next == nil || !next.marker {
+			return succ
+		}
+		// next is a marker
+		if level >= len(next.next) {
+			return &m.tail
+		}
+		markerSucc := next.next[level].Load()
+		if markerSucc != nil {
+			return markerSucc
 		}
 		return &m.tail
 	}
