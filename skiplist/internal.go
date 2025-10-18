@@ -47,11 +47,8 @@ func nextRandom64(seed *atomic.Uint64) uint64 {
 		current := seed.Load()
 		if current == 0 {
 			newSeed := newRandomSeed()
-			if seed.CompareAndSwap(0, newSeed) {
-				current = newSeed
-			} else {
-				continue
-			}
+			seed.CompareAndSwap(0, newSeed)
+			continue
 		}
 
 		x := current

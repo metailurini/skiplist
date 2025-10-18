@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+const testXorshiftFallback = uint64(0xdeadbeefcafebabe)
+
 func TestConcurrentMixedOperationsStorm(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, int](less)
@@ -235,7 +237,7 @@ func TestPutGeneratorDoesNotBlock(t *testing.T) {
 				x ^= x << 25
 				x ^= x >> 27
 				if x == 0 {
-					x = defaultSeed
+					x = testXorshiftFallback
 				}
 				key := int(x & ((1 << 16) - 1))
 				m.Put(key, int(x))
