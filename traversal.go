@@ -43,7 +43,7 @@ func (m *SkipListMap[K, V]) findImpl(key K) (preds, succs []*node[K, V], found b
 			found = true
 		}
 	}
-	return
+	return preds, succs, found
 }
 
 func (m *SkipListMap[K, V]) loadNextPtrImpl(n *node[K, V], level int) **node[K, V] {

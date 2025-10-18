@@ -4,7 +4,8 @@ import "sync/atomic"
 
 // node holds key/value and per-level next pointers.
 type node[K, V any] struct {
-	key    K
+	key K
+	// val is a pointer to the value. A nil value indicates that the node is logically deleted.
 	val    atomic.Pointer[V]
 	next   []atomic.Pointer[*node[K, V]]
 	marker bool
