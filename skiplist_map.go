@@ -224,7 +224,6 @@ func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
 				pendingPtr = nil
 				continue
 			}
-			succNode0 = m.tail
 		}
 
 		newNode.next[0].Store(succPtr0)
@@ -294,7 +293,6 @@ func (m *SkipListMap[K, V]) finishLevels(preds, succs []*node[K, V], pendingPtr 
 				atomic.AddInt64(&m.insertCASRetries, 1)
 				return false, level
 			}
-			succNode = m.tail
 		}
 
 		pending.next[level].Store(succPtr)
