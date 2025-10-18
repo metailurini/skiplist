@@ -24,8 +24,8 @@ type SkipList[K comparable, V any] interface {
 	// Delete removes a key from the skip list and reports the previous value.
 	Delete(key K) (V, bool)
 
-	// Len returns the number of elements in the skip list.
-	Len() int64
+	// LenInt64 returns the number of elements in the skip list.
+	LenInt64() int64
 
 	// SeekGE positions an iterator at the first key greater than or equal to
 	// the provided key.
