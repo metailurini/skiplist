@@ -517,7 +517,7 @@ func TestIteratorSeekGESkipsLogicallyDeletedNodes(t *testing.T) {
 	}
 }
 
-func TestMapSeekGE(t *testing.T) {
+func TestSkipListMapSeekGE(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, int](less)
 
@@ -580,7 +580,7 @@ func TestIteratorSkipsMarkersDuringConcurrentDeletion(t *testing.T) {
 	wg.Wait()
 }
 
-func collectIntKeys(m *Map[int, int]) []int {
+func collectIntKeys(m *SkipListMap[int, int]) []int {
 	keys := make([]int, 0)
 	for node := m.head; ; {
 		nextPtr := node.next[0].Load()

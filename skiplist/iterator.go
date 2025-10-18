@@ -2,7 +2,7 @@ package skiplist
 
 // Iterator provides a forward-only view over the skip list.
 type Iterator[K comparable, V any] struct {
-	m       *Map[K, V]
+	m       *SkipListMap[K, V]
 	current *node[K, V]
 	key     K
 	value   V
@@ -10,7 +10,7 @@ type Iterator[K comparable, V any] struct {
 }
 
 // Iterator returns a new iterator positioned before the first element.
-func (m *Map[K, V]) Iterator() *Iterator[K, V] {
+func (m *SkipListMap[K, V]) Iterator() *Iterator[K, V] {
 	return &Iterator[K, V]{m: m}
 }
 

@@ -2,6 +2,9 @@
 
 A lock-free skip list implementation in Go.
 
+The primary type exposed by this package is `SkipListMap`, constructed via `New`,
+which provides an ordered, concurrent map backed by a skip list.
+
 ## Algorithm sketch and API surface
 
 The public API mirrors the deliverables described in the accompanying research

@@ -39,7 +39,7 @@ type deleteResult struct {
 	ok    bool
 }
 
-func FuzzMapLinearizability(f *testing.F) {
+func FuzzSkipListMapLinearizability(f *testing.F) {
 	f.Add([]byte{0, 1, 1, 0, 2, 2})
 	f.Add([]byte{1, 2, 3, 2, 2, 4})
 	f.Add([]byte{2, 3, 5, 0, 3, 7})
