@@ -1,4 +1,4 @@
-package bench_test
+package skiplist_test
 
 import (
 	"fmt"
