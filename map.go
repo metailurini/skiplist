@@ -6,12 +6,6 @@ var getAfterFindHook func(node any) bool
 var ensureMarkerHook func(node any)
 
 // putLevelCASHook is invoked during a CAS operation when inserting a node at a given level.
-// Parameters:
-//   - level: the skip list level at which the CAS is attempted
-//   - pred: the predecessor node
-//   - expected: the expected successor **node
-//   - newNodePtr: pointer to the pending **node to be inserted
-//
 // This hook is intended solely for test instrumentation and must not perform blocking
 // or mutating operations that affect production correctness.
 var putLevelCASHook func(level int, pred any, expected any, newNodePtr any)
