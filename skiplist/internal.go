@@ -37,6 +37,9 @@ func randomLevel(seed *atomic.Uint64) int {
 	return level
 }
 
+// defaultSeed is a non-zero fallback to ensure that the generator never
+// becomes stuck in the zero state. Any odd constant would work, but this value
+// makes the intent obvious during debugging.
 const defaultSeed = uint64(0xdeadbeefcafebabe)
 
 func nextRandom64(seed *atomic.Uint64) uint64 {
@@ -52,6 +55,10 @@ func nextRandom64(seed *atomic.Uint64) uint64 {
 		}
 
 		x := current
+		// The shift triplet below corresponds to the xorshift64*
+		// generator described by Vigna (2014). These magic numbers are
+		// chosen to achieve a maximal-period sequence across the full
+		// 64-bit state space (excluding zero) while remaining branch-free.
 		x ^= x >> 12
 		x ^= x << 25
 		x ^= x >> 27
@@ -60,6 +67,9 @@ func nextRandom64(seed *atomic.Uint64) uint64 {
 		}
 
 		if seed.CompareAndSwap(current, x) {
+			// The multiplier 2685821657736338717 is part of the same
+			// xorshift64* construction and scrambles the bits to
+			// improve equidistribution without introducing locks.
 			return x * 2685821657736338717
 		}
 	}
