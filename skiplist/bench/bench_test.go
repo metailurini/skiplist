@@ -18,7 +18,7 @@ const (
 	distZipf
 )
 
-func BenchmarkMapWorkloads(b *testing.B) {
+func BenchmarkSkipListMapWorkloads(b *testing.B) {
 	distributions := []struct {
 		name string
 		kind distributionKind

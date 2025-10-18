@@ -5,8 +5,8 @@ import "sync/atomic"
 var getAfterFindHook func(node any) bool
 var ensureMarkerHook func(node any)
 
-// Map is a concurrent skip list implementation.
-type Map[K comparable, V any] struct {
+// SkipListMap is a concurrent skip list implementation.
+type SkipListMap[K comparable, V any] struct {
 	less               Less[K]
 	head               *node[K, V]
 	tail               *node[K, V]
@@ -15,10 +15,10 @@ type Map[K comparable, V any] struct {
 	insertCASSuccesses int64
 }
 
-// New returns a new skip list.
-func New[K comparable, V any](less Less[K]) *Map[K, V] {
+// New returns a new SkipListMap.
+func New[K comparable, V any](less Less[K]) *SkipListMap[K, V] {
 	head, tail := newSentinels[K, V]()
-	return &Map[K, V]{
+	return &SkipListMap[K, V]{
 		less: less,
 		head: head,
 		tail: tail,
@@ -27,7 +27,7 @@ func New[K comparable, V any](less Less[K]) *Map[K, V] {
 
 // find returns the predecessors and successors of the given key at each level.
 // The returned `found` is true if the key is found in the skip list and is not logically deleted.
-func (m *Map[K, V]) find(key K) (preds, succs []*node[K, V], found bool) {
+func (m *SkipListMap[K, V]) find(key K) (preds, succs []*node[K, V], found bool) {
 	preds = make([]*node[K, V], MaxLevel)
 	succs = make([]*node[K, V], MaxLevel)
 
@@ -97,13 +97,13 @@ func (m *Map[K, V]) find(key K) (preds, succs []*node[K, V], found bool) {
 	return preds, succs, found
 }
 
-func (m *Map[K, V]) LenInt64() int64 {
+func (m *SkipListMap[K, V]) LenInt64() int64 {
 	return atomic.LoadInt64(&m.length)
 }
 
 // Get returns the value for a key.
 // The boolean is true if the key exists, false otherwise.
-func (m *Map[K, V]) Get(key K) (V, bool) {
+func (m *SkipListMap[K, V]) Get(key K) (V, bool) {
 	_, succs, found := m.find(key)
 	if !found {
 		var v V
@@ -121,14 +121,14 @@ func (m *Map[K, V]) Get(key K) (V, bool) {
 }
 
 // Contains returns true if the key exists in the skip list.
-func (m *Map[K, V]) Contains(key K) bool {
+func (m *SkipListMap[K, V]) Contains(key K) bool {
 	_, _, found := m.find(key)
 	return found
 }
 
 // Put inserts or updates the value for the given key.
 // It returns the previous value and a flag indicating whether an existing entry was replaced.
-func (m *Map[K, V]) Put(key K, value V) (V, bool) {
+func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
 	for {
 		preds, succs, found := m.find(key)
 		if found {
@@ -237,14 +237,14 @@ func (m *Map[K, V]) Put(key K, value V) (V, bool) {
 
 // Set inserts or updates the value for the given key.
 // Deprecated: use Put to observe whether an existing value was replaced.
-func (m *Map[K, V]) Set(key K, value V) {
+func (m *SkipListMap[K, V]) Set(key K, value V) {
 	_, _ = m.Put(key, value)
 }
 
 // Delete removes the value associated with the given key from the skip list.
 // The removal is performed in two phases: logical deletion followed by
 // physical unlinking of the node from each level.
-func (m *Map[K, V]) Delete(key K) (V, bool) {
+func (m *SkipListMap[K, V]) Delete(key K) (V, bool) {
 	for {
 		preds, succs, found := m.find(key)
 		if !found {
@@ -267,7 +267,7 @@ func (m *Map[K, V]) Delete(key K) (V, bool) {
 	}
 }
 
-func (m *Map[K, V]) logicalDelete(target *node[K, V]) (V, bool) {
+func (m *SkipListMap[K, V]) logicalDelete(target *node[K, V]) (V, bool) {
 	for {
 		current := target.val.Load()
 		if current == nil {
@@ -282,7 +282,7 @@ func (m *Map[K, V]) logicalDelete(target *node[K, V]) (V, bool) {
 	}
 }
 
-func (m *Map[K, V]) ensureMarker(target *node[K, V]) **node[K, V] {
+func (m *SkipListMap[K, V]) ensureMarker(target *node[K, V]) **node[K, V] {
 	for {
 		nextPtr := target.next[0].Load()
 		succPtr := nextPtr
@@ -312,7 +312,7 @@ func (m *Map[K, V]) ensureMarker(target *node[K, V]) **node[K, V] {
 	}
 }
 
-func (m *Map[K, V]) unlinkNode(preds []*node[K, V], target *node[K, V], markerPtr **node[K, V]) bool {
+func (m *SkipListMap[K, V]) unlinkNode(preds []*node[K, V], target *node[K, V], markerPtr **node[K, V]) bool {
 	succPtr0 := &m.tail
 	if markerPtr != nil {
 		if marker := *markerPtr; marker != nil && marker.marker {
@@ -384,7 +384,7 @@ func (m *Map[K, V]) unlinkNode(preds []*node[K, V], target *node[K, V], markerPt
 	return false
 }
 
-func (m *Map[K, V]) advanceFrom(start *node[K, V]) *node[K, V] {
+func (m *SkipListMap[K, V]) advanceFrom(start *node[K, V]) *node[K, V] {
 	base := start
 	for {
 		if base == nil {
@@ -436,7 +436,7 @@ func (m *Map[K, V]) advanceFrom(start *node[K, V]) *node[K, V] {
 // SeekGE returns an iterator positioned at the first element whose key is
 // greater than or equal to the provided key. The returned iterator is valid
 // if and only if such an element exists.
-func (m *Map[K, V]) SeekGE(key K) *Iterator[K, V] {
+func (m *SkipListMap[K, V]) SeekGE(key K) *Iterator[K, V] {
 	it := m.Iterator()
 	it.SeekGE(key)
 	return it
@@ -445,6 +445,6 @@ func (m *Map[K, V]) SeekGE(key K) *Iterator[K, V] {
 // InsertCASStats reports the total number of CAS retries and successful
 // insertions observed at the skip list's bottom level. These counters enable
 // contention analysis in benchmarks.
-func (m *Map[K, V]) InsertCASStats() (retries, successes int64) {
+func (m *SkipListMap[K, V]) InsertCASStats() (retries, successes int64) {
 	return atomic.LoadInt64(&m.insertCASRetries), atomic.LoadInt64(&m.insertCASSuccesses)
 }
