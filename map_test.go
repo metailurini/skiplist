@@ -189,6 +189,71 @@ func TestPutUpdatesExistingKey(t *testing.T) {
 	}
 }
 
+func TestPutRestartDoesNotReportReplacement(t *testing.T) {
+	less := func(a, b int) bool { return a < b }
+	m := New[int, int](less)
+
+	var once sync.Once
+	var triggered atomic.Bool
+	putLevelCASHook = func(level int, pred any, expected any, _ any) {
+		if level != 1 {
+			return
+		}
+		once.Do(func() {
+			triggered.Store(true)
+			predNode, ok := pred.(*node[int, int])
+			if !ok || predNode == nil {
+				return
+			}
+			expectedPtr, ok := expected.(**node[int, int])
+			if !ok || expectedPtr == nil {
+				return
+			}
+			predNode.next[level].CompareAndSwap(expectedPtr, nil)
+		})
+	}
+	defer func() { putLevelCASHook = nil }()
+
+	for attempts := 0; attempts < 1000; attempts++ {
+		old, replaced := m.Put(1, 42)
+		if triggered.Load() {
+			if replaced {
+				t.Fatalf("expected Put to report replacement=false after restart, got true")
+			}
+			if old != 0 {
+				t.Fatalf("expected zero value after fresh insert, got %d", old)
+			}
+			break
+		}
+
+		if replaced {
+			t.Fatalf("expected initial insert to report replacement=false before hook triggers")
+		}
+		if old != 0 {
+			t.Fatalf("expected zero value before hook triggers, got %d", old)
+		}
+		if _, ok := m.Delete(1); !ok {
+			t.Fatalf("expected Delete to remove key before retrying insert")
+		}
+	}
+
+	if !triggered.Load() {
+		t.Fatalf("expected CAS hook to trigger at level 1")
+	}
+
+	got, ok := m.Get(1)
+	if !ok {
+		t.Fatalf("expected Get to succeed after restart-assisted insert")
+	}
+	if got != 42 {
+		t.Fatalf("expected value 42 after restart-assisted insert, got %d", got)
+	}
+
+	if length := m.LenInt64(); length != 1 {
+		t.Fatalf("expected length 1 after single insert, got %d", length)
+	}
+}
+
 func TestSetWrapperUsesPut(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, string](less)

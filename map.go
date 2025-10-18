@@ -7,6 +7,11 @@ import (
 var getAfterFindHook func(node any) bool
 var ensureMarkerHook func(node any)
 
+// putLevelCASHook is invoked during a CAS operation when inserting a node at a given level.
+// This hook is intended solely for test instrumentation and must not perform blocking
+// or mutating operations that affect production correctness.
+var putLevelCASHook func(level int, pred any, expected any, newNodePtr any)
+
 // SkipListMap is a concurrent skip list implementation.
 type SkipListMap[K comparable, V any] struct {
 	less               Less[K]
@@ -134,8 +139,87 @@ func (m *SkipListMap[K, V]) Contains(key K) bool {
 // Put inserts or updates the value for the given key.
 // It returns the previous value and a flag indicating whether an existing entry was replaced.
 func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
+	var pendingPtr **node[K, V]
+	nextLevel := 1
+
+	finishLevels := func(preds, succs []*node[K, V]) (bool, int) {
+		if pendingPtr == nil {
+			return true, 0
+		}
+
+		pending := *pendingPtr
+
+		height := len(pending.next)
+		for level := nextLevel; level < height; level++ {
+			pred := preds[level]
+			if pred == nil {
+				pred = m.head
+			}
+			if level >= len(pred.next) {
+				// The predecessor we observed no longer has this level; retry.
+				atomic.AddInt64(&m.insertCASRetries, 1)
+				return false, level
+			}
+
+			expected := pred.next[level].Load()
+			succNode := succs[level]
+			succPtr := expected
+			if succPtr == nil {
+				succPtr = &m.tail
+			}
+
+			if succNode != nil && succNode != m.tail {
+				if expected == nil || *expected != succNode {
+					// The snapshot at this level is stale; retry the insertion.
+					atomic.AddInt64(&m.insertCASRetries, 1)
+					return false, level
+				}
+			} else {
+				if expected != nil && *expected != m.tail {
+					atomic.AddInt64(&m.insertCASRetries, 1)
+					return false, level
+				}
+				succNode = m.tail
+			}
+
+			pending.next[level].Store(succPtr)
+
+			if putLevelCASHook != nil {
+				putLevelCASHook(level, pred, expected, pendingPtr)
+			}
+
+			if !pred.next[level].CompareAndSwap(expected, pendingPtr) {
+				atomic.AddInt64(&m.insertCASRetries, 1)
+				return false, level
+			}
+		}
+
+		pendingPtr = nil
+		return true, len(pending.next)
+	}
+
 	for {
 		preds, succs, found := m.find(key)
+
+		if pendingPtr != nil {
+			pending := *pendingPtr
+
+			if succs[0] != pending {
+				pendingPtr = nil
+				var zero V
+				return zero, false
+			}
+
+			done, resumeLevel := finishLevels(preds, succs)
+			if done {
+				var zero V
+				return zero, false
+			}
+
+			nextLevel = resumeLevel
+			continue
+		}
+
 		if found {
 			node := succs[0]
 			for {
@@ -155,7 +239,8 @@ func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
 		height := randomLevel(&m.rng)
 		valCopy := value
 		newNode := newNode(key, &valCopy, height)
-		newNodePtr := &newNode
+		pendingPtr = &newNode
+		nextLevel = 1
 
 		pred0 := preds[0]
 		if pred0 == nil || len(pred0.next) == 0 {
@@ -172,11 +257,13 @@ func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
 		if succNode0 != nil && succNode0 != m.tail {
 			if expected0 == nil || *expected0 != succNode0 {
 				atomic.AddInt64(&m.insertCASRetries, 1)
+				pendingPtr = nil
 				continue
 			}
 		} else {
 			if expected0 != nil && *expected0 != m.tail {
 				atomic.AddInt64(&m.insertCASRetries, 1)
+				pendingPtr = nil
 				continue
 			}
 			succNode0 = m.tail
@@ -184,59 +271,28 @@ func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
 
 		newNode.next[0].Store(succPtr0)
 
-		if !pred0.next[0].CompareAndSwap(expected0, newNodePtr) {
+		if !pred0.next[0].CompareAndSwap(expected0, pendingPtr) {
 			atomic.AddInt64(&m.insertCASRetries, 1)
+			pendingPtr = nil
 			continue
 		}
 
 		atomic.AddInt64(&m.insertCASSuccesses, 1)
 		atomic.AddInt64(&m.length, 1)
 
-		restart := false
-		for level := 1; level < height; level++ {
-			pred := preds[level]
-			if pred == nil {
-				pred = m.head
-			}
-			if level >= len(pred.next) {
-				restart = true
-				break
-			}
-
-			expected := pred.next[level].Load()
-			succNode := succs[level]
-			succPtr := expected
-			if succPtr == nil {
-				succPtr = &m.tail
-			}
-
-			if succNode != nil && succNode != m.tail {
-				if expected == nil || *expected != succNode {
-					restart = true
-					break
-				}
-			} else {
-				if expected != nil && *expected != m.tail {
-					restart = true
-					break
-				}
-				succNode = m.tail
-			}
-
-			newNode.next[level].Store(succPtr)
-
-			if !pred.next[level].CompareAndSwap(expected, newNodePtr) {
-				restart = true
-				break
-			}
+		if height == 1 {
+			pendingPtr = nil
+			var zero V
+			return zero, false
 		}
 
-		if restart {
-			continue
+		done, resumeLevel := finishLevels(preds, succs)
+		if done {
+			var zero V
+			return zero, false
 		}
 
-		var zero V
-		return zero, false
+		nextLevel = resumeLevel
 	}
 }
 
