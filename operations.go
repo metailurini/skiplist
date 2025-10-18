@@ -7,9 +7,9 @@ type mutatorImpl[K comparable, V any] struct {
 	m *SkipListMap[K, V]
 }
 
-// Put inserts or updates the value for the given key in the skiplist.
+// put inserts or updates the value for the given key in the skiplist.
 // It returns the previous value and true if the key existed, otherwise zero value and false.
-func (u *mutatorImpl[K, V]) Put(key K, value V) (V, bool) {
+func (u *mutatorImpl[K, V]) put(key K, value V) (V, bool) {
 	var pendingPtr **node[K, V]
 	nextLevel := 1
 
@@ -25,7 +25,7 @@ func (u *mutatorImpl[K, V]) Put(key K, value V) (V, bool) {
 				return zero, false
 			}
 
-			done, resumeLevel := u.FinishLevels(preds, succs, pendingPtr, nextLevel)
+			done, resumeLevel := u.finishLevels(preds, succs, pendingPtr, nextLevel)
 			if done {
 				var zero V
 				return zero, false
@@ -112,7 +112,7 @@ func (u *mutatorImpl[K, V]) Put(key K, value V) (V, bool) {
 			return zero, false
 		}
 
-		done, resumeLevel := u.FinishLevels(preds, succs, pendingPtr, nextLevel)
+		done, resumeLevel := u.finishLevels(preds, succs, pendingPtr, nextLevel)
 		if done {
 			var zero V
 			return zero, false
@@ -122,9 +122,9 @@ func (u *mutatorImpl[K, V]) Put(key K, value V) (V, bool) {
 	}
 }
 
-// FinishLevels completes the insertion of a new node at higher levels in the skiplist.
+// finishLevels completes the insertion of a new node at higher levels in the skiplist.
 // It returns true if done, and the next level to resume from.
-func (u *mutatorImpl[K, V]) FinishLevels(preds, succs []*node[K, V], pendingPtr **node[K, V], nextLevel int) (bool, int) {
+func (u *mutatorImpl[K, V]) finishLevels(preds, succs []*node[K, V], pendingPtr **node[K, V], nextLevel int) (bool, int) {
 	if pendingPtr == nil {
 		return true, 0
 	}
@@ -179,9 +179,9 @@ func (u *mutatorImpl[K, V]) FinishLevels(preds, succs []*node[K, V], pendingPtr 
 	return true, len(pending.next)
 }
 
-// LogicalDelete marks the value of the target node as deleted.
+// logicalDelete marks the value of the target node as deleted.
 // It returns the old value and true if successful, otherwise zero value and false.
-func (u *mutatorImpl[K, V]) LogicalDelete(target *node[K, V]) (V, bool) {
+func (u *mutatorImpl[K, V]) logicalDelete(target *node[K, V]) (V, bool) {
 	var zero V
 	if target == nil {
 		return zero, false
@@ -198,9 +198,9 @@ func (u *mutatorImpl[K, V]) LogicalDelete(target *node[K, V]) (V, bool) {
 	}
 }
 
-// EnsureMarker ensures a marker node is placed after the target node for deletion.
+// ensureMarker ensures a marker node is placed after the target node for deletion.
 // It returns a pointer to the marker node.
-func (u *mutatorImpl[K, V]) EnsureMarker(target *node[K, V]) **node[K, V] {
+func (u *mutatorImpl[K, V]) ensureMarker(target *node[K, V]) **node[K, V] {
 	for {
 		nextPtr := target.next[0].Load()
 		succPtr := nextPtr
@@ -223,9 +223,9 @@ func (u *mutatorImpl[K, V]) EnsureMarker(target *node[K, V]) **node[K, V] {
 	}
 }
 
-// PhysicalDelete removes the target node from the skiplist at all levels.
+// physicalDelete removes the target node from the skiplist at all levels.
 // It returns true if the deletion should be retried.
-func (u *mutatorImpl[K, V]) PhysicalDelete(preds []*node[K, V], target *node[K, V], markerPtr **node[K, V]) bool {
+func (u *mutatorImpl[K, V]) physicalDelete(preds []*node[K, V], target *node[K, V], markerPtr **node[K, V]) bool {
 	succPtr0 := &u.m.tail
 	if markerPtr != nil {
 		if marker := *markerPtr; marker != nil && marker.marker {
@@ -297,9 +297,9 @@ func (u *mutatorImpl[K, V]) PhysicalDelete(preds []*node[K, V], target *node[K, 
 	return false
 }
 
-// Delete removes the key-value pair for the given key from the skiplist.
+// delete removes the key-value pair for the given key from the skiplist.
 // It returns the old value and true if the key existed, otherwise zero value and false.
-func (u *mutatorImpl[K, V]) Delete(key K) (V, bool) {
+func (u *mutatorImpl[K, V]) delete(key K) (V, bool) {
 	for {
 		preds, succs, found := u.m.find(key)
 		if !found {
@@ -308,14 +308,14 @@ func (u *mutatorImpl[K, V]) Delete(key K) (V, bool) {
 		}
 
 		target := succs[0]
-		oldVal, ok := u.LogicalDelete(target)
+		oldVal, ok := u.logicalDelete(target)
 		if !ok {
 			var zero V
 			return zero, false
 		}
-		markerPtr := u.EnsureMarker(target)
+		markerPtr := u.ensureMarker(target)
 
-		if retry := u.PhysicalDelete(preds, target, markerPtr); retry {
+		if retry := u.physicalDelete(preds, target, markerPtr); retry {
 			continue
 		}
 

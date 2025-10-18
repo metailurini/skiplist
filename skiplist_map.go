@@ -61,14 +61,14 @@ func (m *SkipListMap[K, V]) Contains(key K) bool {
 // Put inserts or updates the value for the given key.
 // It returns the previous value and a flag indicating whether an existing entry was replaced.
 func (m *SkipListMap[K, V]) Put(key K, value V) (V, bool) {
-	return m.mutator.Put(key, value)
+	return m.mutator.put(key, value)
 }
 
 // Delete removes the value associated with the given key from the skip list.
 // The removal is performed in two phases: logical deletion followed by
 // physical unlinking of the node from each level.
 func (m *SkipListMap[K, V]) Delete(key K) (V, bool) {
-	return m.mutator.Delete(key)
+	return m.mutator.delete(key)
 }
 
 // SeekGE returns an iterator positioned at the first element whose key is
