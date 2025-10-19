@@ -18,10 +18,7 @@ func TestConcurrentMixedOperationsStorm(t *testing.T) {
 	m := New[int, int](less)
 
 	const keySpace = 128
-	goroutines := 2 * runtime.GOMAXPROCS(0)
-	if goroutines < 4 {
-		goroutines = 4
-	}
+	goroutines := max(2*runtime.GOMAXPROCS(0), 4)
 	const operationsPerGoroutine = 2000
 
 	model := make(map[int]int)
@@ -34,7 +31,7 @@ func TestConcurrentMixedOperationsStorm(t *testing.T) {
 		go func(seed int64) {
 			defer wg.Done()
 			r := rand.New(rand.NewSource(seed))
-			for i := 0; i < operationsPerGoroutine; i++ {
+			for range operationsPerGoroutine {
 				key := r.Intn(keySpace)
 				op := r.Intn(4)
 				switch op {
@@ -148,7 +145,7 @@ func TestDeleteWhileInsertRacing(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		<-start
-		for i := 0; i < iterations; i++ {
+		for range iterations {
 			_, _ = m.Delete(1)
 		}
 	}()
@@ -173,7 +170,7 @@ func TestCascadeMarkerCleanup(t *testing.T) {
 	m := New[int, int](less)
 
 	const totalKeys = 1024
-	for i := 0; i < totalKeys; i++ {
+	for i := range totalKeys {
 		m.Put(i, i)
 	}
 
@@ -257,20 +254,17 @@ func TestPutGeneratorDoesNotBlock(t *testing.T) {
 	less := func(a, b int) bool { return a < b }
 	m := New[int, int](less)
 
-	goroutines := 4 * runtime.GOMAXPROCS(0)
-	if goroutines < 8 {
-		goroutines = 8
-	}
+	goroutines := max(4*runtime.GOMAXPROCS(0), 8)
 	const operationsPerGoroutine = 10000
 
 	var wg sync.WaitGroup
-	for g := 0; g < goroutines; g++ {
+	for g := range goroutines {
 		wg.Add(1)
 		seed := uint64(0x9e3779b97f4a7c15) + uint64(g)
 		go func(seed uint64) {
 			defer wg.Done()
 			x := seed | 1
-			for i := 0; i < operationsPerGoroutine; i++ {
+			for range operationsPerGoroutine {
 				x ^= x >> 12
 				x ^= x << 25
 				x ^= x >> 27

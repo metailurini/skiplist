@@ -50,7 +50,7 @@ func BenchmarkSkipListMapWorkloads(b *testing.B) {
 						threads := threads
 						b.Run(fmt.Sprintf("P%d", threads), func(b *testing.B) {
 							m := New[int, int](less)
-							for i := 0; i < keyRange/2; i++ {
+							for i := range keyRange / 2 {
 								_, _ = m.Put(i, i)
 							}
 
@@ -63,7 +63,7 @@ func BenchmarkSkipListMapWorkloads(b *testing.B) {
 
 							var wg sync.WaitGroup
 							wg.Add(threads)
-							for tIdx := 0; tIdx < threads; tIdx++ {
+							for tIdx := range threads {
 								go func(worker int) {
 									defer wg.Done()
 									seed := int64(worker+1) * 1_000_003

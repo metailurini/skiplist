@@ -10,7 +10,7 @@ func TestRandomLevelDistribution(t *testing.T) {
 	counts := make(map[int]int)
 	rng := &RNG{}
 	rng.seed.Store(0x123456789abcdef)
-	for i := 0; i < numSamples; i++ {
+	for range numSamples {
 		level := rng.RandomLevel()
 		counts[level]++
 	}

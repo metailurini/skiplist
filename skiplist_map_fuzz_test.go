@@ -108,8 +108,8 @@ func checkLinearizable(records []*fuzzRecord) bool {
 	}
 
 	deps := make([]uint32, n)
-	for i := 0; i < n; i++ {
-		for j := 0; j < n; j++ {
+	for i := range n {
+		for j := range n {
 			if i == j {
 				continue
 			}
