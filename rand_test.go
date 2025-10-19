@@ -8,8 +8,7 @@ import (
 func TestRandomLevelDistribution(t *testing.T) {
 	numSamples := 1000000
 	counts := make(map[int]int)
-	rng := &RNG{}
-	rng.seed.Store(0x123456789abcdef)
+	rng := newRNGWithSeed(0x123456789abcdef)
 	for range numSamples {
 		level := rng.RandomLevel()
 		counts[level]++
