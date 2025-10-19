@@ -10,6 +10,8 @@ type metricShard struct {
 	insertCASRetries   atomic.Int64
 	insertCASSuccesses atomic.Int64
 	length             atomic.Int64
+	// Pad to cache line size to prevent false sharing.
+	_ [40]byte
 }
 
 type Metrics struct {
