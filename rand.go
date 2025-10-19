@@ -9,6 +9,7 @@ import (
 
 type RNG struct {
 	pool sync.Pool
+	once sync.Once
 }
 
 func newRNG() *RNG {
@@ -28,11 +29,13 @@ func newRNGWithSeed(seed int64) *RNG {
 }
 
 func (r *RNG) ensurePool() {
-	if r.pool.New == nil {
-		r.pool.New = func() any {
-			return rand.New(rand.NewSource(time.Now().UnixNano()))
+	r.once.Do(func() {
+		if r.pool.New == nil {
+			r.pool.New = func() any {
+				return rand.New(rand.NewSource(time.Now().UnixNano()))
+			}
 		}
-	}
+	})
 }
 
 func (r *RNG) nextRandom64() uint64 {
