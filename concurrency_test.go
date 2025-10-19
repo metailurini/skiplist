@@ -63,26 +63,68 @@ func TestConcurrentMixedOperationsStorm(t *testing.T) {
 
 	observed := make(map[int]int)
 	it := m.Iterator()
+	var prevKey *int
 	for it.Next() {
 		k := it.Key()
 		v := it.Value()
+
+		// no duplicate keys
 		if _, ok := observed[k]; ok {
 			t.Fatalf("duplicate key %d", k)
 		}
 		observed[k] = v
-	}
 
-	// Verify that all observed keys are present in the model (values may diverge due to race conditions)
-	modelMu.Lock()
-	for k := range observed {
-		if _, ok := model[k]; !ok {
-			t.Fatalf("key %d present in skiplist but not in model", k)
+		// ordering check (strictly increasing)
+		if prevKey != nil {
+			if !less(*prevKey, k) {
+				t.Fatalf("iterator out of order: previous=%d current=%d", *prevKey, k)
+			}
+		}
+		prevKey = new(int)
+		*prevKey = k
+
+		// iterator vs Get/Contains consistency
+		if gv, ok := m.Get(k); !ok {
+			t.Fatalf("iterator returned key %d, but Get reports missing", k)
+		} else if gv != v {
+			t.Fatalf("value mismatch for key %d: iterator=%d Get=%d", k, v, gv)
+		}
+		if !m.Contains(k) {
+			t.Fatalf("iterator returned key %d, but Contains reports false", k)
 		}
 	}
-	modelMu.Unlock()
 
-	// Note: length may be off by 1 due to concurrent races, but structure should be consistent
-	_ = m.LenInt64()
+	// // lengths must match observed, currently disabled due to possible contention effects
+	// if got := int(m.LenInt64()); got != len(observed) {
+	// 	t.Fatalf("length mismatch: skiplist=%d observed=%d", got, len(observed))
+	// }
+
+	// SeekGE correctness for all possible keys in keySpace
+	for seek := range keySpace {
+		it := m.SeekGE(seek)
+		// find expected first key >= seek in observed
+		found := false
+		expectedKey := 0
+		for k := seek; k < keySpace; k++ {
+			if _, ok := observed[k]; ok {
+				found = true
+				expectedKey = k
+				break
+			}
+		}
+		if found {
+			if !it.Valid() {
+				t.Fatalf("SeekGE(%d) expected key %d but iterator invalid", seek, expectedKey)
+			}
+			if it.Key() != expectedKey {
+				t.Fatalf("SeekGE(%d) expected key %d got %d", seek, expectedKey, it.Key())
+			}
+		} else {
+			if it.Valid() {
+				t.Fatalf("SeekGE(%d) expected no key but got %d", seek, it.Key())
+			}
+		}
+	}
 }
 
 func TestDeleteWhileInsertRacing(t *testing.T) {

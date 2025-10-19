@@ -36,30 +36,18 @@ func (u *mutatorImpl[K, V]) put(key K, value V) (V, bool) {
 
 		if found {
 			node := succs[0]
-			oldPtr := node.val.Load()
-			if oldPtr == nil {
-				// Logically deleted, try to undelete
-				valCopy := value
-				if node.val.CompareAndSwap(nil, &valCopy) {
-					u.m.metrics.AddLen(1)
-					var zero V
-					return zero, false
+			for {
+				oldPtr := node.val.Load()
+				if oldPtr == nil {
+					markerPtr := u.ensureMarker(node)
+					u.physicalDelete(preds, node, markerPtr)
+					break
 				}
-				// Failed, retry
-				continue
-			} else {
-				// Update existing
-				for {
-					if node.val.CompareAndSwap(oldPtr, &value) {
-						return *oldPtr, true
-					}
-					oldPtr = node.val.Load()
-					if oldPtr == nil {
-						break
-					}
+				if node.val.CompareAndSwap(oldPtr, &value) {
+					return *oldPtr, true
 				}
-				continue
 			}
+			continue
 		}
 
 		height := u.m.rng.RandomLevel()
@@ -315,6 +303,13 @@ func (u *mutatorImpl[K, V]) delete(key K) (V, bool) {
 		markerPtr := u.ensureMarker(target)
 
 		if retry := u.physicalDelete(preds, target, markerPtr); retry {
+			continue
+		}
+
+		if _, _, verifyFound := u.m.find(key); verifyFound {
+			// A concurrent insertion added the key back before the delete
+			// could finish. Retry the removal so the delete only reports
+			// success once the key is absent.
 			continue
 		}
 
