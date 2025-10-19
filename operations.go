@@ -1,7 +1,5 @@
 package skiplist
 
-import "sync/atomic"
-
 // mutatorImpl groups the mutating algorithms.
 type mutatorImpl[K comparable, V any] struct {
 	m *SkipListMap[K, V]
@@ -52,7 +50,7 @@ func (u *mutatorImpl[K, V]) put(key K, value V) (V, bool) {
 
 		height := u.m.rng.RandomLevel()
 		valCopy := value
-		newNode := newNode(key, &valCopy, height)
+		newNode := u.m.acquireNode(key, &valCopy, height)
 		pendingPtr = &newNode
 		nextLevel = 1
 
@@ -72,12 +70,14 @@ func (u *mutatorImpl[K, V]) put(key K, value V) (V, bool) {
 			if expected0 == nil || *expected0 != succNode0 {
 				u.m.metrics.IncInsertCASRetry()
 				pendingPtr = nil
+				u.m.releaseNode(newNode)
 				continue
 			}
 		} else {
 			if expected0 != nil && *expected0 != u.m.tail {
 				u.m.metrics.IncInsertCASRetry()
 				pendingPtr = nil
+				u.m.releaseNode(newNode)
 				continue
 			}
 		}
@@ -87,6 +87,7 @@ func (u *mutatorImpl[K, V]) put(key K, value V) (V, bool) {
 		if !pred0.next[0].CompareAndSwap(expected0, pendingPtr) {
 			u.m.metrics.IncInsertCASRetry()
 			pendingPtr = nil
+			u.m.releaseNode(newNode)
 			continue
 		}
 
@@ -198,7 +199,7 @@ func (u *mutatorImpl[K, V]) ensureMarker(target *node[K, V]) **node[K, V] {
 		if nextNode.marker {
 			return nextPtr
 		}
-		marker := &node[K, V]{key: target.key, next: make([]atomic.Pointer[*node[K, V]], 1), marker: true}
+		marker := u.m.acquireMarker(target.key)
 		marker.next[0].Store(succPtr)
 		markerPtr := &marker
 		if target.next[0].CompareAndSwap(nextPtr, markerPtr) {
@@ -207,6 +208,8 @@ func (u *mutatorImpl[K, V]) ensureMarker(target *node[K, V]) **node[K, V] {
 			}
 			return markerPtr
 		}
+		marker.next[0].Store(nil)
+		u.m.releaseMarkerNode(marker)
 	}
 }
 
@@ -305,6 +308,9 @@ func (u *mutatorImpl[K, V]) delete(key K) (V, bool) {
 		if retry := u.physicalDelete(preds, target, markerPtr); retry {
 			continue
 		}
+
+		u.m.releaseMarkerPtr(markerPtr)
+		u.m.releaseNode(target)
 
 		if _, _, verifyFound := u.m.find(key); verifyFound {
 			// A concurrent insertion added the key back before the delete

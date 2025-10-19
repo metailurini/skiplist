@@ -1,15 +1,22 @@
 package skiplist
 
+import (
+	"sync"
+	"sync/atomic"
+)
+
 // Less is a function that returns true if a is less than b.
 type Less[K comparable] func(a, b K) bool
 
 // SkipListMap ties components together and keeps public API unchanged.
 type SkipListMap[K comparable, V any] struct {
-	less    Less[K]
-	head    *node[K, V]
-	tail    *node[K, V]
-	metrics *Metrics
-	rng     *RNG
+	less       Less[K]
+	head       *node[K, V]
+	tail       *node[K, V]
+	metrics    *Metrics
+	rng        *RNG
+	nodePool   sync.Pool
+	markerPool sync.Pool
 	// hot-path function fields (concrete functions, not interfaces)
 	find        func(key K) (preds, succs []*node[K, V], found bool)
 	loadNextPtr func(n *node[K, V], level int) **node[K, V]
@@ -27,6 +34,17 @@ func New[K comparable, V any](less Less[K]) *SkipListMap[K, V] {
 		tail:    tail,
 		metrics: newMetrics(),
 		rng:     newRNG(),
+	}
+	m.nodePool.New = func() any {
+		return &node[K, V]{
+			next: make([]atomic.Pointer[*node[K, V]], MaxLevel),
+		}
+	}
+	m.markerPool.New = func() any {
+		return &node[K, V]{
+			marker: true,
+			next:   make([]atomic.Pointer[*node[K, V]], 1),
+		}
 	}
 	// wire function fields to implementation functions
 	m.find = m.findImpl
