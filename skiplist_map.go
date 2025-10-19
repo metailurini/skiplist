@@ -1,5 +1,8 @@
 package skiplist
 
+// Less is a function that returns true if a is less than b.
+type Less[K comparable] func(a, b K) bool
+
 // SkipListMap ties components together and keeps public API unchanged.
 type SkipListMap[K comparable, V any] struct {
 	less    Less[K]
