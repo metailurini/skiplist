@@ -3,15 +3,7 @@ package skiplist
 import "sync/atomic"
 
 func (m *SkipListMap[K, V]) acquireNode(key K, val *V, level int) *node[K, V] {
-	raw := m.nodePool.Get()
-	var n *node[K, V]
-	if raw == nil {
-		n = &node[K, V]{
-			next: make([]atomic.Pointer[*node[K, V]], level),
-		}
-	} else {
-		n = raw.(*node[K, V])
-	}
+	n := m.nodePool.Get().(*node[K, V])
 
 	if cap(n.next) < level {
 		n.next = make([]atomic.Pointer[*node[K, V]], level)
@@ -29,7 +21,7 @@ func (m *SkipListMap[K, V]) acquireNode(key K, val *V, level int) *node[K, V] {
 }
 
 func (m *SkipListMap[K, V]) releaseNode(n *node[K, V]) {
-	if n == nil || n == m.head || n == m.tail {
+	if n == nil || n == m.head || n == m.tail || n.marker {
 		return
 	}
 
@@ -49,15 +41,7 @@ func (m *SkipListMap[K, V]) releaseNode(n *node[K, V]) {
 }
 
 func (m *SkipListMap[K, V]) acquireMarker(key K) *node[K, V] {
-	raw := m.markerPool.Get()
-	var marker *node[K, V]
-	if raw == nil {
-		marker = &node[K, V]{
-			next: make([]atomic.Pointer[*node[K, V]], 1),
-		}
-	} else {
-		marker = raw.(*node[K, V])
-	}
+	marker := m.markerPool.Get().(*node[K, V])
 
 	if cap(marker.next) == 0 {
 		marker.next = make([]atomic.Pointer[*node[K, V]], 1)
