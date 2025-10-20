@@ -773,19 +773,19 @@ func keyShouldNotExists[K, V Comparable](t *testing.T, key K, list *SkipList[K, 
 }
 
 func debugSkipList[K Comparable, V any](list *SkipList[K, V]) {
-	fmt.Printf("--header--: %v\n", list.headNote)
-	r := list.headNote.Next()
-	for r != nil {
-		fmt.Printf("[%v<>%v] ", r.Key, r.Value)
-		for _, v := range r.forwards {
-			if v == nil {
-				continue
-			}
-			fmt.Printf("[%v<>%v] ", v.Key, v.Value)
-		}
-		fmt.Println()
-		r = r.Next()
-	}
+	// fmt.Printf("--header--: %v\n", list.headNote)
+	// r := list.headNote.Next()
+	// for r != nil {
+	// 	fmt.Printf("[%v<>%v] ", r.Key, r.Value)
+	// 	for _, v := range r.forwards {
+	// 		if v == nil {
+	// 			continue
+	// 		}
+	// 		fmt.Printf("[%v<>%v] ", v.Key, v.Value)
+	// 	}
+	// 	fmt.Println()
+	// 	r = r.Next()
+	// }
 }
 
 func TestSkipList_IRange(t *testing.T) {
