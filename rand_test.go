@@ -8,8 +8,7 @@ import (
 func TestRandomLevelDistribution(t *testing.T) {
 	numSamples := 1000000
 	counts := make(map[int]int)
-	rng := &RNG{}
-	rng.seed.Store(0x123456789abcdef)
+	rng := newRNGWithSeed(0x123456789abcdef)
 	for range numSamples {
 		level := rng.RandomLevel()
 		counts[level]++
@@ -40,5 +39,12 @@ func TestRandomLevelDistribution(t *testing.T) {
 		if math.Abs(ratio-P) > tolerance {
 			t.Errorf("Expected ratio between level %d and %d to be around %.2f ± %.4f, but got %.2f", i, i+1, P, tolerance, ratio)
 		}
+	}
+}
+
+func BenchmarkRNGPoolInit(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		rng := newRNG()
+		rng.nextRandom64() // This will trigger pool.New on first call
 	}
 }

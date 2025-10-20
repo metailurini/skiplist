@@ -2,48 +2,50 @@ package skiplist
 
 import (
 	"math/bits"
-	"sync/atomic"
+	"math/rand"
+	"sync"
 	"time"
 )
 
-const defaultSeed = uint64(0xdeadbeefcafebabe)
-
-func newRandomSeed() uint64 {
-	seed := uint64(time.Now().UnixNano())
-	if seed == 0 {
-		seed = defaultSeed
-	}
-	return seed
-}
-
 type RNG struct {
-	seed atomic.Uint64
+	pool sync.Pool
+	once sync.Once
 }
 
 func newRNG() *RNG {
 	r := &RNG{}
-	r.seed.Store(newRandomSeed())
+	r.pool.New = func() any {
+		return rand.New(rand.NewSource(time.Now().UnixNano()))
+	}
+	// Pre-warm the pool
+	r.pool.Put(r.pool.New())
 	return r
 }
 
-func (r *RNG) nextRandom64() uint64 {
-	for {
-		current := r.seed.Load()
-		if current == 0 {
-			r.seed.CompareAndSwap(0, newRandomSeed())
-			continue
-		}
-		x := current
-		x ^= x >> 12
-		x ^= x << 25
-		x ^= x >> 27
-		if x == 0 {
-			x = defaultSeed
-		}
-		if r.seed.CompareAndSwap(current, x) {
-			return x * 2685821657736338717
-		}
+func newRNGWithSeed(seed int64) *RNG {
+	r := &RNG{}
+	r.pool.New = func() any {
+		return rand.New(rand.NewSource(seed))
 	}
+	return r
+}
+
+func (r *RNG) ensurePool() {
+	r.once.Do(func() {
+		if r.pool.New == nil {
+			r.pool.New = func() any {
+				return rand.New(rand.NewSource(time.Now().UnixNano()))
+			}
+		}
+	})
+}
+
+func (r *RNG) nextRandom64() uint64 {
+	r.ensurePool()
+	rr := r.pool.Get().(*rand.Rand)
+	v := rr.Uint64()
+	r.pool.Put(rr)
+	return v
 }
 
 func (r *RNG) RandomLevel() int {

@@ -28,13 +28,14 @@ type SkipListMap[K comparable, V any] struct {
 // New returns a new SkipListMap.
 func New[K comparable, V any](less Less[K]) *SkipListMap[K, V] {
 	head, tail := newSentinels[K, V]()
+	rng := newRNG()
 	m := &SkipListMap[K, V]{
-		less:    less,
-		head:    head,
-		tail:    tail,
-		metrics: newMetrics(),
-		rng:     newRNG(),
+		less: less,
+		head: head,
+		tail: tail,
+		rng:  rng,
 	}
+	m.metrics = newMetrics(rng)
 	m.nodePool.New = func() any {
 		return &node[K, V]{
 			next: make([]atomic.Pointer[*node[K, V]], MaxLevel),
