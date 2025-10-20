@@ -17,6 +17,8 @@ func newRNG() *RNG {
 	r.pool.New = func() any {
 		return rand.New(rand.NewSource(time.Now().UnixNano()))
 	}
+	// Pre-warm the pool
+	r.pool.Put(r.pool.New())
 	return r
 }
 
