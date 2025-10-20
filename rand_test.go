@@ -41,3 +41,10 @@ func TestRandomLevelDistribution(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkRNGPoolInit(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		rng := newRNG()
+		rng.nextRandom64() // This will trigger pool.New on first call
+	}
+}
