@@ -41,13 +41,10 @@ func BenchmarkSkipListMapWorkloads(b *testing.B) {
 	less := func(a, b int) bool { return a < b }
 
 	for _, dist := range distributions {
-		dist := dist
 		b.Run(dist.name, func(b *testing.B) {
 			for _, workload := range workloads {
-				workload := workload
 				b.Run(workload.name, func(b *testing.B) {
 					for _, threads := range threadCounts {
-						threads := threads
 						b.Run(fmt.Sprintf("P%d", threads), func(b *testing.B) {
 							m := New[int, int](less)
 							for i := range keyRange / 2 {

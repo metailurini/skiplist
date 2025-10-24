@@ -25,7 +25,7 @@ func TestConcurrentMixedOperationsStorm(t *testing.T) {
 	var modelMu sync.Mutex
 
 	var wg sync.WaitGroup
-	for g := 0; g < goroutines; g++ {
+	for g := range goroutines {
 		wg.Add(1)
 		seed := int64(0xdeadbeef) + int64(g)
 		go func(seed int64) {
