@@ -23,10 +23,7 @@ type Metrics struct {
 func newMetrics(rng *RNG) *Metrics {
 	shardCount := 1
 	if rng != nil {
-		shardCount = runtime.GOMAXPROCS(0)
-		if shardCount < 1 {
-			shardCount = 1
-		}
+		shardCount = max(runtime.GOMAXPROCS(0), 1)
 		shardCount = nextPowerOfTwo(shardCount)
 	}
 	return &Metrics{
