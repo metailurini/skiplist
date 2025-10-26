@@ -118,6 +118,10 @@ func TestConcurrentMixedOperationsStorm(t *testing.T) {
 			it2 := m.SeekGE(seek)
 			if it2.Valid() {
 				k2 := it2.Key()
+				// Verify the retry result is semantically correct
+				if k2 < seek {
+					t.Fatalf("SeekGE(%d) retry returned key %d < %d", seek, k2, seek)
+				}
 				// This could happen due to cleanup/helping between calls
 				// Log but don't fail, as this is an expected race in the data structure
 				t.Logf("SeekGE(%d) reported none, but retry found %d (transient state)", seek, k2)
